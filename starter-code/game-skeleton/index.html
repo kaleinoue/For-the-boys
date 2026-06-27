@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FORGE Game Skeleton</title>
+  <!-- Phaser 3 loads free from a CDN — no install needed. -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  <style>
+    body { margin: 0; background: #0d0d14; display: grid; place-items: center; height: 100vh; font-family: system-ui, sans-serif; }
+    #game { box-shadow: 0 0 40px #000; border-radius: 8px; overflow: hidden; }
+    h1 { color: #f5c542; position: fixed; top: 12px; font-size: 16px; letter-spacing: 2px; }
+  </style>
+</head>
+<body>
+  <h1>🔥 FORGE — your game starts here</h1>
+  <div id="game"></div>
+
+  <script>
+    // ============================================================
+    //  THE SIMPLEST REAL GAME: a player square you move with arrows,
+    //  a coin to collect, and a score. Everything you need to GROW
+    //  into your real game lives in these three functions.
+    //  Replace the art, the rules, and the goal with YOUR game.
+    // ============================================================
+
+    let player, cursors, coin, scoreText;
+    let score = 0;
+
+    function preload() {
+      // No image files needed yet — we draw shapes in create().
+      // Later you can load sprites: this.load.image('hero', 'hero.png');
+    }
+
+    function create() {
+      // --- the player (a glowing square) ---
+      player = this.add.rectangle(200, 200, 32, 32, 0x42a5f5);
+      this.physics.add.existing(player);
+      player.body.setCollideWorldBounds(true);
+
+      // --- a coin to grab ---
+      coin = this.add.circle(400, 300, 12, 0xf5c542);
+      this.physics.add.existing(coin);
+
+      // --- score text ---
+      scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '20px', color: '#ffffff' });
+
+      // --- when player touches coin, score + move the coin ---
+      this.physics.add.overlap(player, coin, () => {
+        score += 1;
+        scoreText.setText('Score: ' + score);
+        coin.x = Phaser.Math.Between(40, 560);
+        coin.y = Phaser.Math.Between(40, 360);
+      });
+
+      // --- read the arrow keys ---
+      cursors = this.input.keyboard.createCursorKeys();
+    }
+
+    function update() {
+      // movement: this runs ~60 times a second
+      const speed = 240;
+      player.body.setVelocity(0);
+      if (cursors.left.isDown)  player.body.setVelocityX(-speed);
+      if (cursors.right.isDown) player.body.setVelocityX(speed);
+      if (cursors.up.isDown)    player.body.setVelocityY(-speed);
+      if (cursors.down.isDown)  player.body.setVelocityY(speed);
+    }
+
+    // --- the engine config: glue it all together ---
+    const config = {
+      type: Phaser.AUTO,
+      width: 600,
+      height: 400,
+      parent: 'game',
+      backgroundColor: '#1a1a2e',
+      physics: { default: 'arcade', arcade: { debug: false } },
+      scene: { preload, create, update },
+    };
+
+    new Phaser.Game(config);
+  </script>
+</body>
+</html>

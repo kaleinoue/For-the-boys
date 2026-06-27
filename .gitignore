@@ -1,0 +1,26 @@
+# 🔐 SECRETS — never commit these (Quest 11 explains why in blood)
+.env
+.env.*
+!.env.example
+*.key
+creds/
+secrets/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Node / build junk
+node_modules/
+dist/
+build/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
