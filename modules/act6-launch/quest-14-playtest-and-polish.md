@@ -13,6 +13,11 @@
 
 **⭐ XP on the line:** 100 base (+50 boss).
 
+> 🎵 **Leo — this is your level.** "Juice" is mostly *sound and timing*, which is
+> literally your craft. Hits, whooshes, a beat under the action, feedback that lands
+> on rhythm — that's what turns "fine" into "I can't stop playing." This quest shows
+> you free tools to make sound effects (and you can drop in music). Make it *sing*.
+
 ---
 
 ## 🤔 Why this Quest matters

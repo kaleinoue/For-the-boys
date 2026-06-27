@@ -12,6 +12,12 @@
 
 **⭐ XP on the line:** 100 base (+50 boss).
 
+> 🎨 **Jonah — this is your level.** Right now the game is a blue square. By the end
+> of this quest it should start looking like *yours*. While the crew vibe-codes the
+> mechanic, you drive the look: sketch the style, lock the palette, design the first
+> real sprite. A game that looks like an artist made it beats an asset-flip every
+> single time. (Zeppelin: you own the *feel* of how it moves. Pair up.)
+
 ---
 
 ## 🤔 Why this Quest matters

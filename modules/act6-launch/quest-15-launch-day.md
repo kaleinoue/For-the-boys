@@ -13,6 +13,11 @@
 
 **⭐ XP on the line:** 100 base (+50 boss).
 
+> 🚀 **Crew finale — all three classes, one launch:** Jonah drives the *visual*
+> launch (logo, screenshots, the itch.io page art). Leo runs the *hype* (the trailer
+> plan and the launch post — your showman moment). Zeppelin ships the *deploy* and
+> tests it works on every device. This is everything you've built, going live.
+
 ---
 
 ## 🤔 Why this Quest matters
