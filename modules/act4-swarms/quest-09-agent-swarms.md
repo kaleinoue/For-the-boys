@@ -13,7 +13,7 @@
 
 ## 🤔 Why this Quest matters
 
-One agent that "does everything" is like one person being designer, programmer, QA, and marketer at 2am — it gets foggy, contradicts itself, and forgets what it decided three steps ago. Real studios split roles so each brain stays sharp. You're about to do the same with AI: several small agents, each with ONE job and ONE attitude, handing work down a line. This is the pattern behind almost every serious AI product you've heard of. Learn it here on something fun (your game) before you ever need it for something that matters.
+One agent that "does everything" is like one person being designer, programmer, QA, and marketer at 2am — it gets foggy, contradicts itself, and forgets what it decided three steps ago. Real studios split roles so each brain stays sharp. You already split that way in real life: Jonah leads the art and the vision, Leo owns sound and hype, Zeppelin engineers and breaks things. You're about to do the same with AI: several small agents, each with ONE job and ONE attitude, handing work down a line. Think of the swarm as AI *stand-ins* for those roles — an idea-pitcher, a builder, a critic, a hype writer — but the REAL crew still drives every decision. This is the pattern behind almost every serious AI product you've heard of. Learn it here on something fun (your game) before you ever need it for something that matters.
 
 ## 🧠 The Briefing
 
@@ -39,6 +39,8 @@ Give one agent the prompt *"design a feature, write the code, find the bugs in y
 - **Focus = quality.** A prompt that says *"You are a ruthless QA playtester. Your ONLY job is to find what breaks."* produces far better bug-hunting than a paragraph trying to be everything at once.
 
 Same model (Gemini), same `chat()` function — the *system prompt* is the entire personality. That's the lever.
+
+> 🎨 **Jonah (Artificer):** the **designer** agent is the AI version of your job — it throws out bold ideas. Treat it like a sketchpad partner, not a boss: it pitches, you decide what's actually on-brand for our game.
 
 ### The three patterns you'll actually use
 
@@ -75,6 +77,8 @@ You never need to touch `llm.py`. If the swarm works, it's because your *orchest
 ## 🛠️ The Quest (do this now)
 
 You'll build a `swarm/` folder next to the agent starter and create three files: a roster of agents, an orchestrator, and a runner.
+
+> 🤖 **AI Ops is on rotation.** The 🤖 swarm role passes around the crew so nobody outsources learning AI. Check `../../CREW.md` for whose turn it is to lead AI Ops this Act — that's who owns building the swarm this quest. Zeppelin, Leo, or Jonah: tag in.
 
 ### Step 1 — Make the folder and a quick sanity check
 
@@ -196,7 +200,7 @@ if __name__ == "__main__":
 
     load_dotenv()
     run_pipeline(
-        "A new power-up for our game",
+        "Propose and critique a new power-up for our game",
         pipeline=["designer", "coder", "critic", "hype"],
     )
 ```
@@ -231,6 +235,8 @@ Then **actually use the output**:
 3. If the hype tagline is good, save it — you'll want marketing copy in Act 6.
 
 The swarm didn't decide FOR you. It gave your crew a sharper starting point than a blank page. That's the job.
+
+> 🎮 **Crew move:** the swarm just played AI-Jonah (idea), AI-Zeppelin (build + critique), and AI-Leo (hype) for you — fast and free. Now the REAL crew weighs in: Jonah checks if the idea fits the look, Zeppelin checks if it'll feel good to play, Leo checks if the tagline slaps. The agents draft; you three are the final cut.
 
 ## 💀 Boss Challenge (+50 XP)
 

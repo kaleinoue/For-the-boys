@@ -136,7 +136,7 @@ There's a commented-out second example at the bottom of `agent.py`. Uncomment it
 
 ```python
 run("What day of the week is it, and tell me one fact about octopuses.")
-run("What's 15% of 240, and what is the capital city behind that Wikipedia search 'France'?")
+run("If our crew of 3 splits 240 enemy coins evenly, how many each — and what's a fun fact about the number you get?")
 ```
 
 Run again and watch which tools it reaches for. Try to design a question that needs **two different tools in a row** — that's the agent flexing.
@@ -144,6 +144,8 @@ Run again and watch which tools it reaches for. Try to design a question that ne
 ### 5. WRITE YOUR OWN TOOL
 
 This is the real quest. Add a brand-new tool to `tools.py`. Follow the exact shape: takes one string, returns one string, has a clear one-line docstring.
+
+> ⚔️ **Zeppelin (Vanguard):** A dice/random tool is exactly what an engineer reaches for to tune game balance — roll a hundred fights, see if the numbers feel fair before they ever touch real code. Build this one and you've got a tiny balance lab.
 
 Example — a dice roller (great for a game studio):
 
@@ -198,6 +200,8 @@ Turn this agent into your studio's **game-design helper.** Add a tool that's act
 
 - **`roll_dice`** (above) — for prototyping combat/loot/random mechanics.
 - **`name_generator`** — feed it a theme, return a few punchy names for enemies, items, or levels. (You can build this with `random.choice` over word lists, *or* — fancier — call your own `chat()` from Quest 3 inside the tool.)
+
+  > 🎨 **Jonah (Artificer):** This is *your* tool. You're naming the characters and the world — a name-generator is a brainstorming partner that throws you twenty options so you can pick the one that fits the art. Feed it your theme and steal the best ones.
 - **`save_idea`** — appends a one-line game idea to a local file like `project/IDEAS.md`, so your agent can stockpile ideas while you brainstorm. (This one is also the Boss — read the safety note there first.)
 
 Concrete action: build at least one game-relevant tool, then ask the agent something like *"Brainstorm an enemy, give it a name, and save the idea."* You now have a robot intern that does design grunt-work.

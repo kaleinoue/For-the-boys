@@ -35,8 +35,9 @@ Think of it like a job: the **system prompt** is the contract and job descriptio
 
 ```
 For this whole conversation, you are a senior game designer who only suggests
-ideas a 2-person beginner team can actually build in Phaser 3. Be blunt about
-scope. Never suggest 3D or multiplayer. Got it? Then wait for my first task.
+ideas a 3-person beginner team — an artist, a musician, and an athlete — can
+actually build in Phaser 3. Be blunt about scope. Never suggest 3D or
+multiplayer. Got it? Then wait for my first task.
 ```
 
 Everything after that inherits those rules. When you write real agent code in Act 2, the system prompt becomes an actual separate field — same idea, now it's structural.
@@ -50,6 +51,8 @@ You are "Marge," a grizzled QA lead with 15 years testing mobile games. You are
 allergic to feature creep and you've killed a hundred bloated designs. Be terse.
 ```
 A persona isn't a costume — it changes the *substance* of the answer. "Marge" will flag scope problems a generic assistant glosses over.
+
+> ⚔️ **Zeppelin (Vanguard):** This is your weapon. You run QA — keep a "Marge" persona on standby and point her at every feature the crew gets excited about: *"Marge, is this in scope for a 3-person beginner team, or are we kidding ourselves?"* Her job is to kill the bloat before it costs you the ship date.
 
 ### Few-shot examples (show, don't tell)
 
@@ -134,6 +137,8 @@ distinct angles (funny / tense / cute). Output as a numbered list.
 ```
 → Three sharp, on-brand, ready-to-paste options. *That's* the job. Notice it's just the power moves stacked: **persona + few-shot + format + constraints**.
 
+> 🎵 **Leo (Bard):** Copy like this is *your* lane — you own the trailer and the launch. The few-shot trick is how you nail a consistent voice: paste two blurbs in your crew's tone, and every line after matches. Same move later writes your itch.io page and trailer script.
+
 > ⚠️ **Real Talk:** More instructions isn't always better. Cram in 12 conflicting rules and the model gets confused or quietly ignores half. Engineering is about the *right* instructions, clearly ordered — not the most. If a prompt gets worse as you add to it, you've over-stuffed it. Cut back.
 
 ---
@@ -155,14 +160,18 @@ This is the main event. Open `../../project/GAME.md` and read the template's sec
 
 ```
 You are a senior game designer helping a beginner studio fill out a Game Design
-Document. We're building a 2D browser game in Phaser 3. Our chosen concept:
-[paste your one shortlisted idea].
+Document. The studio is three friends since childhood: Jonah (artist — owns the
+look & feel), Leo (musician — owns sound, music, and rhythm), and Zeppelin
+(athlete — owns movement, game-feel, and difficulty). We're building a 2D browser
+game in Phaser 3. Our chosen concept: [paste your one shortlisted idea].
 
 Interview me to fill out this GDD, ONE question at a time. After each answer, ask
 the next question. Cover, in order: the one-liner, the fun hook, the core loop
 (3–5 actions), win/lose conditions, controls, look & feel, and the REALISTIC
-minimum scope. Push back if my scope is too big for beginners. When we're done,
-output the whole thing as clean markdown matching these section headers:
+minimum scope. Lean on each person's strength — ask Jonah about art direction,
+Leo about how sound/rhythm drives the game, Zeppelin about controls and feel.
+Push back if our scope is too big for beginners. When we're done, output the
+whole thing as clean markdown matching these section headers:
 [paste the section titles from GAME.md].
 ```
 

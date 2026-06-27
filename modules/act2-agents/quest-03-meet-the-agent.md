@@ -9,6 +9,8 @@
 
 Up to now you've been typing into a chat box. That's fine for thinking, but you can't *build* on a chat box — you can't loop it, automate it, or give it tools. This quest is where you stop being a user of AI and start being a **builder** of AI. You're going to write code that calls a model directly through an API, and that one move unlocks the entire rest of the campaign: agents, swarms, the AI helpers that will design and test your game. Everything from here grows out of the tiny file you build today.
 
+> 🤖 **AI Ops this Act:** Someone takes point on AI Ops each Act while the other two pair in over their shoulder — Zeppelin's the natural lead here since he's the engineer, but the role **rotates** (nobody outsources learning AI). Whoever leads, the other two type along too. You all need this one in your hands.
+
 ## 🧠 The Briefing
 
 ### Chatbot vs. Agent (say it with me)
@@ -155,8 +157,8 @@ Edit the bottom of `llm.py` (the `__main__` block) and try your own message — 
 
 ```python
 print(chat(
-    [{"role": "user", "content": "Give me 3 wild browser-game ideas in one line each."}],
-    system="You are a punchy indie game designer. No fluff.",
+    [{"role": "user", "content": "Pitch me 3 power-up ideas for a fast platformer, one line each."}],
+    system="You are a punchy indie game designer working with a 3-person crew — an artist, a musician, and an athlete. No fluff.",
 ))
 ```
 
@@ -175,6 +177,8 @@ This Python setup is your **studio's tooling** — the workbench every later que
 - In **Quest 9** you'll run a whole **swarm** of these — a designer, a coder, a playtester — all powered by the `chat()` function you wired today.
 
 Concrete action: in your `project/GAME.md`, drop a quick note under any section: *"Studio AI tooling online — Gemini brain wired in Quest 3."* Tiny, but it marks the moment your studio got a robot intern.
+
+> 🎵 **Leo (Bard):** This same `chat()` is what later drafts trailer copy and hype-post lines for the launch. The brain you light today eventually writes the words that sell the game.
 
 ## 💀 Boss Challenge (+50 XP)
 

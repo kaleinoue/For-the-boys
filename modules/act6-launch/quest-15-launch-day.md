@@ -76,6 +76,10 @@ You need four things, all AI-assisted, all in the crew's voice:
 
 The key prompt move: **give AI your real details and your vibe, then tell it to match your voice, not invent one.** Examples and a full prompt pack are in your Loot.
 
+> 🎨 **Jonah (Artificer):** The cover image, the screenshots, and the itch.io page art are the first thing anyone sees — they decide whether a stranger clicks play. That's your call. Pick the frames that show the game at its best (mid-action, not the title screen), and make the page *look* like the game feels.
+
+> 🎵 **Leo (Bard):** The trailer and the launch post are your stage. You wrote the hook into the music; now write it into the copy. Read the social posts out loud — if it doesn't sound like something you'd actually say, cut it. The 30-second trailer is a performance, and performance is your craft.
+
 ### The pre-launch checklist (run it before you share)
 
 Don't text the link, *then* find the bug. Five-minute checklist before you go loud:
@@ -190,7 +194,8 @@ GAME: [title]
 PITCH: [one line — what it is]
 HOOK: [the one thing that makes it fun/replayable]
 CONTROLS: [e.g. arrow keys + space]
-MADE BY: [crew names], a crew of friends who built this in [X weeks] with AI + $0.
+MADE BY: [crew names — e.g. Jonah, Leo & Zeppelin], childhood friends who built
+         this in [X weeks] with AI + $0.
 VOICE: [pick: dry & funny / hype & loud / chill & confident / chaotic gremlin]
 PLAY IT: [your live URL]
 

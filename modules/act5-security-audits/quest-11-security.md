@@ -24,6 +24,8 @@ You're about to make this game **public**. The whole internet — bots included 
 
 This is **defensive** security: you are hardening *your own* project so it survives contact with the public. Everything here is about protecting what's yours.
 
+> ⚔️ **Zeppelin (Vanguard) — Red-Team Captain of this whole Act:** breaking things on purpose to find the holes first *is* your wheelhouse, so you own the security/QA call across Quests 11–13. Run the audits, lead the attacks, make the final "is this safe to ship?" call. But everybody learns the craft — Leo and Jonah do every step too, because the day you're not around is the day a key leaks. You're the captain, not the only crew member who can fly the ship.
+
 ### Secrets: the one mistake that haunts you
 
 A **secret** is anything that proves "I'm allowed to do this": API keys, passwords, tokens. Your `GEMINI_API_KEY` is a secret. It's basically a password to *your* free AI quota.
@@ -73,6 +75,8 @@ Whatever you paste into an AI tool *leaves your machine*. So don't paste:
 - **Anything under NDA** (a part-time job's internal code, a school's private data, etc.).
 
 For this project you're almost always pasting game ideas and public code — totally fine. Just build the reflex: *"would I be okay if this exact text were screenshotted?"*
+
+> 🎮 **Crew move:** you three have been friends since you were little, so it's easy to forget — don't paste a crewmate's real address, phone, or family stuff into an AI tool just because it's convenient for a marketing line. Leo's trailer credits and Jonah's itch.io page can use first names and "the crew"; keep the private details on your own machines.
 
 ### Prompt injection: a teaser (full fight in Quest 12)
 
@@ -130,8 +134,8 @@ You just rehearsed the exact move that saves you when a real leak happens. Muscl
 
 ### Step 6 — Add any missing safety
 - Confirm `.env.example` exists and has **only** placeholder values (yours does — keep it that way).
-- If any teammate cloned the repo and made their own `.env`, confirm *theirs* is ignored too (`git check-ignore` on their machine).
-- Commit your cleanup (the *fixes*, never the secrets).
+- If a crewmate cloned the repo and made their own `.env` (Jonah on the art machine, Leo on the audio rig), confirm *theirs* is ignored too — run `git check-ignore` on each machine, not just the captain's.
+- Commit your cleanup (the *fixes*, never the secrets). A clean message like `zeppelin/security-audit: confirm .env ignored, no secrets in src` is exactly the kind of paper trail a real studio keeps.
 
 ---
 

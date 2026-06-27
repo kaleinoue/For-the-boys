@@ -86,17 +86,24 @@ main (the real game, always works)
 
 **Never commit straight to `main`. Always branch.** `main` is the always-works version everyone shares. You experiment on a branch, then merge in through a PR. This one habit prevents 90% of team Git pain.
 
+> 🎮 **Crew move — name branches `yourname/what-it-does`:** that prefix tells everyone, at a glance, whose work it is. For this crew that looks like:
+> - `zeppelin/add-double-jump` — Vanguard tuning the movement
+> - `leo/title-music` — Bard wiring up the sound
+> - `jonah/player-sprite` — Artificer dropping in real art
+>
+> Three branches, three lanes, no stepping on each other. When you `git branch` and see all three names side by side, that's the studio working in parallel.
+
 ### The 8 commands you'll actually use
 
 ```bash
-git pull origin main              # 1. get the latest before you start
-git checkout -b add-jump-sound    # 2. make + switch to your own branch
-git add project/src/index.html    # 3. stage the files you changed
-git commit -m "Add jump sound"    # 4. save a snapshot with a message
-git push -u origin add-jump-sound # 5. upload your branch to GitHub
+git pull origin main                   # 1. get the latest before you start
+git checkout -b zeppelin/add-double-jump  # 2. make + switch to your own branch
+git add project/src/index.html         # 3. stage the files you changed
+git commit -m "Add double jump"        # 4. save a snapshot with a message
+git push -u origin zeppelin/add-double-jump  # 5. upload your branch to GitHub
 # 6. open a Pull Request on github.com (the site walks you through it)
-git checkout main                 # 7. switch back to main when merged
-git pull origin main              # 8. pull the merged changes down
+git checkout main                      # 7. switch back to main when merged
+git pull origin main                   # 8. pull the merged changes down
 ```
 
 ### Merge conflicts (don't fear them)
@@ -108,8 +115,10 @@ A **conflict** happens when two people change the *same lines*. Git can't guess 
 const speed = 240;
 =======
 const speed = 300;
->>>>>>> add-jump-sound
+>>>>>>> zeppelin/add-double-jump
 ```
+
+(Classic one: Jonah bumped `speed` to `240` on his sprite branch, Zeppelin pushed it to `300` because the movement felt sluggish. Git can't pick — so they talk, decide `300` feels right, keep that, and move on.)
 
 To resolve: **delete the markers** (`<<<<<<<`, `=======`, `>>>>>>>`) and keep the version you want (or combine them), then `git add` and `git commit`. That's it. Conflicts feel scary the first time and trivial by the third. Small, frequent PRs = tiny, easy conflicts.
 
@@ -126,19 +135,19 @@ Find a real bug in your slice (or plant one: change `player.body` to `playr.body
 3. Read the *why*, apply the smallest fix, reload. Confirm it works.
 
 ### Step 2 — Each crew member: branch, commit, PR
-Every person does this on a small improvement to the game (a color, a sound, a tweak, a bug fix):
+Every person does this on a small improvement that fits their lane — Jonah a color/sprite, Leo a sound, Zeppelin a movement tweak or bug fix:
 ```bash
 git pull origin main
-git checkout -b yourname-small-fix
+git checkout -b jonah/player-sprite
 # ...make your small change in project/src/index.html...
 git add project/src/index.html
-git commit -m "Describe what you changed"
-git push -u origin yourname-small-fix
+git commit -m "Swap the player square for a real sprite"
+git push -u origin jonah/player-sprite
 ```
 Then on **github.com**, open a **Pull Request** from your branch into `main`. Write one sentence on what it does.
 
 ### Step 3 — Review & merge
-A *different* crewmate reads the PR's "Files changed" tab, leaves a comment, and clicks **Merge**. Then everyone runs:
+A *different* crewmate reviews — e.g. Leo opens Jonah's `jonah/player-sprite` PR, reads the "Files changed" tab, and leaves a comment ("sprite looks great — does it still hit the same collision box?") before clicking **Merge**. Reviewing someone else's branch is how a bug gets caught before it's in `main`. Then everyone runs:
 ```bash
 git checkout main
 git pull origin main
@@ -162,9 +171,10 @@ Pick ONE:
 - **Protect `main`:** on GitHub → repo **Settings → Branches → Add branch protection rule** for `main`. Require a pull request before merging (and a review if your crew is 3+). Now nobody can accidentally torch the main game — the workflow is enforced, not just suggested.
 - **AI-review a PR:** copy a teammate's PR **diff** (the "Files changed" view) and paste it into claude.ai:
   ```
-  You're a senior dev reviewing this pull request diff. Find bugs, risky
-  changes, and anything that could break the game. Suggest improvements.
-  Be specific and reference the lines.
+  You're a senior dev reviewing this pull request diff (Leo's
+  leo/title-music branch). Find bugs, risky changes, and anything that
+  could break the game. Suggest improvements. Be specific and reference
+  the lines.
   [paste the diff]
   ```
   Post the useful findings as a PR comment. You just added an AI reviewer to your studio — a taste of the swarms coming in Act 4.

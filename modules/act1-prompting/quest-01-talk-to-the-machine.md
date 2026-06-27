@@ -52,10 +52,10 @@ give me some game ideas
 **✅ Sharp prompt:**
 ```
 You're a senior indie game designer who ships small, addictive browser games.
-Brainstorm 10 original game ideas for a crew of beginner coders building in
-Phaser 3 (a 2D JavaScript engine). Each game must be finishable in 2–3 weeks,
-playable in a browser with arrow keys + one button, and have ONE hook that makes
-people replay it.
+Brainstorm 10 original game ideas for a 3-person crew of beginner coders — an
+artist, a musician, and an athlete — building in Phaser 3 (a 2D JavaScript
+engine). Each game must be finishable in 2–3 weeks, playable in a browser with
+arrow keys + one button, and have ONE hook that makes people replay it.
 
 Format as a table: Title | One-line pitch | Core hook | Coding difficulty (1–5).
 ```
@@ -69,7 +69,7 @@ That sharp prompt wasn't luck. It had four parts. Memorize these and you'll neve
 
 - **R — Role:** Who should the AI *be*? → *"You're a senior indie game designer..."*
 - **A — Action:** What *exactly* do you want? → *"...brainstorm 10 original game ideas..."*
-- **C — Context:** What does it need to know? → *"...for beginner coders, Phaser 3, finishable in 2–3 weeks, arrow keys + one button..."*
+- **C — Context:** What does it need to know? → *"...for an artist, a musician, and an athlete coding in Phaser 3, finishable in 2–3 weeks, arrow keys + one button..."*
 - **E — Expectations:** What should the output *look like*? → *"...as a table: Title | Pitch | Hook | Difficulty (1–5)."*
 
 Miss one and quality drops. No **Role** and the tone wanders. No **Context** and it gives you ideas for a 60-person AAA studio. No **Expectations** and you get a wall of prose you have to reorganize yourself.
@@ -84,6 +84,8 @@ weirder and more original — surprise me. Keep the table format.
 ```
 
 Each turn builds on the last. You're sculpting, not rerolling. The best AI users have *long* conversations that get sharper, not a graveyard of abandoned one-shot prompts.
+
+> 🎵 **Leo (Bard):** Same move works on *sound*. Ask for game concepts, then refine: *"now make 5 of these built around rhythm or music as the core mechanic."* Don't restart — bend the conversation toward what you're best at.
 
 > ⚠️ **Real Talk:** The AI will hand you a confident, well-formatted answer even when it's wrong — wrong facts, fake "statistics," made-up game studios, dead links. It is *predicting plausible text*, not checking truth. Treat every factual claim as "probably right, verify before you bet on it." You'll go deep on this in the security and audit Acts. For now: trust the *vibes*, verify the *facts*.
 
@@ -109,9 +111,10 @@ This kicks off your capstone. Open a fresh chat and paste this (the full templat
 
 ```
 You're a senior indie game designer who has shipped dozens of small, addictive
-browser games. You're brainstorming with a new studio: a crew of ~4 friends, age
-18, who can read/write basic Python and JavaScript and will build in Phaser 3
-(a 2D browser game engine, free).
+browser games. You're brainstorming with a new studio: three friends since
+childhood — an artist, a musician, and an athlete — who can read/write basic
+Python and JavaScript and will build in Phaser 3 (a 2D browser game engine,
+free). Lean into that combo: visuals, sound/rhythm, and tight game-feel/movement.
 
 Brainstorm 50 original browser-game ideas for us. Hard constraints:
 - 2D only, playable in a browser, controllable with arrow keys + one action button
@@ -127,6 +130,19 @@ Before you start, if anything's unclear, ask me up to 3 questions first.
 
 Notice the last line — *asking it to ask you* surfaces what it's missing before it wastes a generation. Answer its questions, then let it rip.
 
+#### 🎮 Ideas built for THIS crew
+
+The AI's 50 will be generic until you steer it. You three have a freakish combo — **Jonah's art + Leo's music/rhythm + Zeppelin's movement & competition.** Most studios *can't* do all three. Feed the AI sparks like these (one punchy line each) and tell it to riff:
+
+- **Beat Runner** — an endless runner where the level pulses, scrolls, and spawns obstacles *on the beat*. Leo's track *is* the level design.
+- **One-Button Slam** — a stylish 1-button sports-arcade game (dunk / home-run / penalty-kick), all timing and juice. Zeppelin's playground.
+- **Rhythm Dodge** — top-down combat where enemy attacks fire to the music; dodge on-beat to counter. Miss the beat, take the hit.
+- **Score Chase** — a co-op high-score chase: two players, one screen, escalating combo meter, leaderboard. Built to start arguments.
+- **Gallery Glitch** — a fast platformer set inside Jonah's hand-drawn paintings; each level a new art style, music shifts to match.
+- **Tempo Tower** — climb a tower that speeds up every loop; the music tempo *is* the difficulty dial. Zeppelin tunes the curve, Leo scores it.
+
+> 🎨 **Jonah (Artificer):** When the AI spits a list, ask it *"which of these has the strongest visual identity in ONE screenshot?"* — your art is the hook people click on, so weight ideas toward look-and-feel.
+
 ### Step 5 — Shortlist 5, as a crew
 Read all 50 out loud with your crew. Argue. Then tell the AI:
 ```
@@ -134,6 +150,8 @@ Here are the 5 we like best: [paste them]. For each, give me a one-sentence
 reason it could be a hit AND the single biggest risk to building it.
 ```
 This pressure-tests your gut picks before you commit.
+
+> 🎮 **Crew move:** Vote with your strengths. Jonah picks the one he's dying to *draw*, Leo the one he can *score*, Zeppelin the one that'll *feel* best to play. The idea all three of you fight for is the one worth building.
 
 ---
 

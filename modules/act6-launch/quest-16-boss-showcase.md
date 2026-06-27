@@ -27,10 +27,10 @@ You did the thing. You started as people who "use AI" and you're ending as peopl
 
 A bad demo is someone apologizing while they alt-tab around looking for a window. A good demo is **four beats, rehearsed, under 5 minutes:**
 
-1. **The Pitch (30 sec)** — what the game is, who it's for, the one hook. Use the punchy description you already wrote in `LAUNCH.md`. Don't ad-lib; you wrote good copy, use it.
-2. **The Live Demo (2 min)** — *play it live, from the public URL.* Not localhost — the real link, to prove it's real. Show the core loop and the best moment. Have a backup screen-recording ready in case wifi dies (it always dies during demos).
+1. **The Pitch (30 sec)** — what the game is, who it's for, the one hook. Use the punchy description you already wrote in `LAUNCH.md`. Don't ad-lib; you wrote good copy, use it. **Jonah opens** — he owns the vision, so he names what the game *is* and shows the art that sells it.
+2. **The Live Demo (2 min)** — *play it live, from the public URL.* Not localhost — the real link, to prove it's real. **Zeppelin runs the controller** — he tuned the feel, he plays it best, so he drives the core loop and the best moment live. Have a backup screen-recording ready in case wifi dies (it always dies during demos).
 3. **What We Learned (1 min)** — the honest version. The hardest bug, the coolest thing the swarm did, the moment it clicked.
-4. **The Numbers (30 sec)** — proof it's alive: the URL, how many people played, high scores, first reactions from Quest 15's Boss. Numbers make it real.
+4. **The Numbers (30 sec)** — proof it's alive: the URL, how many people played, high scores, first reactions from Quest 15's Boss. **Leo runs the hype** — the trailer, the launch post, the reactions. The showman closes the show. Numbers make it real.
 
 > 🤖 **Co-pilot tip:** Rehearse the demo *once*, out loud, all the way through, before any audience. Time it. Demos always run 2x longer than you think. AI can help: paste your `LAUNCH.md` and ask *"turn this into a tight 4-minute demo script with time markers for each section."*
 
@@ -44,7 +44,7 @@ A **retrospective** ("retro") is a structured look back that every real engineer
 | 🧱 **What was hard?** | The friction, blockers, the stuff that hurt |
 | 🔄 **What would we do differently?** | The concrete changes for next time |
 
-The rule that makes it work: **blameless.** You attack the *problem*, not the *person*. "The agent swarm gave us conflicting code" — not "Jordan's agent broke everything." Everyone talks. The Hype Lead's voice counts as much as the Lead Engineer's. End it by turning the "differently" column into **one or two actual changes** you'll make on the next project — otherwise it's just feelings.
+The rule that makes it work: **blameless.** You attack the *problem*, not the *person*. "The agent swarm gave us conflicting code" — not "Zeppelin's branch broke everything." You three have been friends since before this campaign; keep it that way. Everyone talks — Leo's voice on the launch counts as much as Zeppelin's on the engine, and Jonah's on the art counts as much as either. End it by turning the "differently" column into **one or two actual changes** you'll make on the next project — otherwise it's just feelings.
 
 > ⚠️ **Real Talk:** The temptation today is to only talk about wins. Resist it. The most valuable line in any retro is the one that stings a little — the thing that *almost* sank the project. Naming it is how you never get bitten by it again. A retro with no "what was hard" is a retro that taught you nothing.
 
@@ -74,16 +74,24 @@ Where this goes next (pick your own adventure):
 - **🐝 Keep a swarm running** — a standing crew of agents that research, draft, and monitor things for you.
 - **🌍 Contribute to open source** — find a project, fix a real bug with AI's help, get your name on something public.
 
-The point isn't to do all five. It's that you *can* now.
+The point isn't to do all five. It's that you *can* now. And each of you has a lane the AI just made wider:
+
+> 🎨 **Jonah (Artificer):** AI + art & design is *your* frontier — concept art, character design, generative visuals, game art direction. You can now art-direct a whole project AND prototype it. Point your eye at AI image and design tools and you're unstoppable.
+
+> 🎵 **Leo (Bard):** AI + music & media is your path — AI-assisted composition, sound design, trailers, the whole creative-media stack. You already make things *feel*; now you can produce at studio speed. Score the next game, cut the next trailer, build a sound.
+
+> ⚔️ **Zeppelin (Vanguard):** AI + building & competition is yours — ship faster, enter the game jams, build the hard systems, compete. You're the athlete who likes breaking things and winning; AI is the gear that lets you out-build a whole team. Go find a leaderboard.
 
 ---
 
 ## 🛠️ The Quest (do this now)
 
 ### Step 1 — Prep your parts (15 min)
-Each crew member preps a **2-minute piece** tied to the role they led (Game Director / Lead Engineer / Research Lead / AI Ops / Security & QA / Hype Lead):
-- *what I owned, the hardest part, the thing I'm proudest of.*
-- The Lead Engineer preps the live demo. The Hype Lead preps the numbers + reactions.
+Each crew member preps a **2-minute piece** tied to the role they led — *what I owned, the hardest part, the thing I'm proudest of.* For this crew:
+- **Jonah (Game Director / Art)** — preps the vision and the look: why the game is what it is, the art style, the page art. He opens the showcase.
+- **Zeppelin (Lead Engineer / QA)** — preps the **live demo**: he tuned the feel, he plays it best, he drives the controller from the public URL.
+- **Leo (Hype Lead / Research)** — preps the **numbers + reactions**: the trailer, the launch post, the first-player replies from Quest 15. He closes the show.
+- The 🤖 AI Ops role rotated between all three — whoever ran the swarm last preps a 30-second "coolest thing an agent did for us" beat.
 
 ### Step 2 — Run the group showcase (25 min)
 Do it for real — record it, or present to friends/family/a discord. Use the **Showcase Template** (Loot):
@@ -109,7 +117,7 @@ Open `../../CREW.md`. This is the finish line:
 | 1400 | 🏗️ Architect |
 | **2000+** | **🔥 Forgemaster — you shipped a game. You're dangerous.** |
 
-Write each person's final XP and rank into `CREW.md`. **Forgemaster** is not participation — it's *"I built and launched a real thing with AI."* Own it.
+Write each person's final XP and rank into `CREW.md` — **Zeppelin, Leo, and Jonah**, by name, with the number you each earned. **Forgemaster** is not participation — it's *"I built and launched a real thing with AI."* Three childhood friends, three Forgemasters, one shipped game. Own it.
 
 ### Step 5 — Write "What We're Building Next" (15 min)
 As a crew, write a short plan into `project/LAUNCH.md` (or a new `project/NEXT.md`): the 1–2 retro fixes, which "where this goes next" path each person wants, and **one concrete thing you'll start within two weeks** so the momentum doesn't die. A studio that ships once is a fluke; a studio that plans the next ship is a studio.
@@ -216,7 +224,9 @@ MINDSET: stay ahead of AI by USING it. Wield, don't consume. Ship things.
 
 There is no next quest. You started as people who *use* AI and you're ending as people who **build with it, command it, and ship with it.** You designed a game, researched it, built it with agents, hardened it, audited it, polished it, and **launched it to the world.** That's the whole campaign. That's the proof.
 
-The Forge is cold now — but you're a Forgemaster, and the only thing left to forge is whatever you want.
+Jonah, you led the vision and made it *look* like something worth playing. Leo, you gave it sound, rhythm, and a voice loud enough to launch. Zeppelin, you made it *feel* right and you never stopped shipping. You did it together — the way you've done everything since you were kids. That's the part no AI can give you.
+
+The Forge is cold now — but the three of you are Forgemasters, and the only thing left to forge is whatever you want.
 
 **The campaign is over. You're just getting started.** 🔥
 

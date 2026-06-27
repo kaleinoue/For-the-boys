@@ -36,6 +36,8 @@ Why? Because the second you explain something, you've contaminated the test. On 
 
 > 🤖 **Co-pilot tip:** Set a literal rule before each session: *"I'm not allowed to speak until they say they're done or they physically rage-quit."* Give a crewmate permission to elbow you if you break it. It's that hard and that important.
 
+> 🎨 **Jonah (Artificer):** Watch where testers' eyes go *before* they touch a key. If three of them don't even notice the player sprite or can't tell the enemy from the background, that's a *visual* clarity bug, not a control bug — and it's yours to fix. Confusion on screen is art feedback in disguise.
+
 ### What you're actually looking for: confused / bored / stuck
 
 You're not collecting opinions ("I think it's cool!" — useless). You're collecting **moments**. Watch for three things and timestamp them:
@@ -65,6 +67,8 @@ Both matter. But don't confuse them: you can't "debug" boredom, and adding scree
 - **📳 Screenshake** — a tiny camera shake on impact: `this.cameras.main.shake(100, 0.01)` (duration ms, intensity). A *little* goes a long way. Too much = nausea.
 - **✨ Feedback** — flash the player white on hit, scale a coin up before it vanishes, pop a "+10" number that floats and fades. A Phaser **tween** (`this.tweens.add({...})`) does most of this in a few lines.
 - **📈 Difficulty curve** — the *shape* of the challenge over time. Good games ramp: easy enough to feel competent in 10 seconds, then a gentle climb. A flat-hard game feels unfair; a flat-easy game feels boring. This is the most important "feel" fix and the one your Boss Challenge attacks.
+
+> ⚔️ **Zeppelin (Vanguard):** The difficulty curve and the *feel* of movement are your home turf — you're the athlete, you know when a jump lands a half-beat late or an enemy spawn is cheap. Own the tuning pass: enemy speed, spawn rate, jump weight. When a tester rage-quits at the same spot twice, that number is yours to fix until it feels fair.
 
 > ⚠️ **Real Talk:** AI is *great* at suggesting polish ("add a hit-flash, a coin pickup sound, and a combo counter") and *terrible* at knowing what's actually fun for *your* game. Fun is felt, not computed. Use AI to generate options and prioritize the obvious stuff — but the crew plays it and the crew decides. If the screenshake makes your game feel worse, delete it. No model can overrule your own hands on the keyboard.
 
@@ -109,7 +113,7 @@ NOTES:
 
 ### Step 4 — Fix the top issues (30 min)
 - Take the **"Fix First"** list. As a crew, sanity-check it (AI ranks impact decently but doesn't *feel* your game — overrule it where your gut disagrees).
-- Fix the top 2–3 issues. Bugs get debugged; feel issues get juiced.
+- Fix the top 2–3 issues. Bugs get debugged; feel issues get juiced. Split the work the way you've split it all along: Zeppelin tunes game feel and difficulty (`zeppelin/slower-enemy-ramp`), Jonah fixes the visual confusion testers flagged (`jonah/clearer-enemy-sprite`), Leo lands the sound and timing (`leo/coin-pickup-sfx`).
 - Commit each fix on a branch with a clear message (your Quest 8 Git workflow). One fix = one commit.
 
 ### Step 5 — Add at least 2 pieces of juice (15 min)

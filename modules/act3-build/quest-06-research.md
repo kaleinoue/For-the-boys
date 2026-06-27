@@ -17,6 +17,8 @@
 
 Every studio that dies usually dies the same way: they picked a game that was too big, or built something nobody wanted, because they never actually *looked*. Research is how you find the **smallest fun version** of your idea before you waste a month coding the wrong thing.
 
+> 🎮 **Crew move — divide the research:** Leo (Bard) leads the dig — he runs the chats, triangulates the claims, keeps the receipts. Jonah (Artificer) owns the look-and-feel decisions that come out of it: which art style is actually buildable, what the game *reads* like. Zeppelin (Vanguard) red-teams the scope — he's the one asking "can we actually ship this?" and breaking the plan on purpose so it doesn't break later. You're researching a game that has to show off all three of you at once: art, music, and movement. Keep that target in front of you.
+
 But here's the trap: AI will happily invent "facts" with total confidence. A hallucinated stat sounds exactly like a real one. The crews that win aren't the ones who ask AI the most questions — they're the ones who **verify the answers**. Today you learn to use AI as a research engine *and* a lie detector.
 
 ---
@@ -90,10 +92,12 @@ Your **Must have** should be small enough to build in this Act. If you can't des
 
 A great test prompt:
 ```
-You're a senior indie dev mentoring beginners who know basic JS and
-are using Phaser 3. Here's our game idea: [paste]. What is the
-ABSOLUTE smallest version that's still fun? What should we cut to
-ship it in two weeks? Be specific about what's hard in Phaser.
+You're a senior indie dev mentoring a 3-person crew who know basic JS
+and are using Phaser 3 — an artist, a musician, and an athlete who
+wants the game to FEEL good to move in. Here's our game idea: [paste].
+What is the ABSOLUTE smallest version that's still fun AND still shows
+off art + music + tight movement? What should we cut to ship it in two
+weeks? Be specific about what's hard in Phaser.
 ```
 
 ---
@@ -175,6 +179,8 @@ in Phaser get stuck for days? What's secretly hard that looks easy?
 List the top 5 scope traps and, for each, the cheapest cut that avoids it.
 ```
 Read every trap. Then actually **cut something** from your Must-have tier and move it to Nice-to-have. Write a one-line note in `RESEARCH.md`: *"Cut [X] because the red-team flagged [Y]."* Cutting under fire is a senior-dev move. That's the +50.
+
+> ⚔️ **Zeppelin (Vanguard):** this one's yours. You're the crew's red-teamer — the guy who'd rather find the wall now than run into it in week two. Be ruthless about scope here. Every feature you talk Leo and Jonah out of today is a week you don't lose later.
 
 ---
 

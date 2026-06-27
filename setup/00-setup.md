@@ -50,16 +50,20 @@ Your crew needs one shared copy of this repo.
 
 ## 👥 Step 3 — Assemble the crew (~10 min)
 
-Open **[CREW.md](../CREW.md)** and fill it in *together*:
+Open **[CREW.md](../CREW.md)** — it's already set up for **Zeppelin, Leo & Jonah**,
+with a "class" mapped to each of your real talents. Read your card, then together:
 
 1. **Name your studio.** Every great game studio has a name. Pick one. (Nintendo
    means "leave luck to heaven." You can do better... or worse. Have fun.)
-2. **Pick roles.** Each person owns one, but *everyone learns every skill*. Roles
-   are about who *leads* a thing, not who's the only one allowed to touch it.
-3. **Set up your XP tracker** (template's in CREW.md).
+2. **Own your class.** Zeppelin = ⚔️ the Vanguard (engineer/QA), Leo = 🎵 the Bard
+   (research/hype/sound), Jonah = 🎨 the Artificer (director/art). Everyone still
+   learns *every* skill — your class is just what you *lead*. The 🤖 AI Ops role
+   rotates, so each of you runs the agents/swarm for a couple of Acts.
+3. **Set up your XP tracker** — there's a column each for Zeppelin, Leo, and Jonah
+   in CREW.md. First one to Forgemaster wins.
 
-> Solo? You're a one-person studio — legendary origin story. Just play all the
-> roles yourself, and lean on AI as your virtual crew.
+> Doing this with fewer than three? Double up the classes and lean on AI as your
+> extra crewmates.
 
 ---
 

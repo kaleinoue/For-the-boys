@@ -29,6 +29,8 @@ That's the whole loop. Memorize it:
 
 Notice this is exactly what a good project lead does — you're just adding AI agents as some of the "doers."
 
+> 🤖 **Whose studio is it today?** The 🤖 AI Ops role rotates — check `../../CREW.md` for who's leading the swarm this Act. That person runs the orchestrator, but they don't get to *assign taste*: Jonah still owns "does it look like us," Leo owns "does it sound right," Zeppelin owns "does it feel good and not break." Orchestration is leading the crew, not replacing it.
+
 ### "One agent does everything" vs a planned pipeline
 
 You *could* type into claude.ai: *"finish my game."* You'll get vibes, not a game. Here's the contrast:
@@ -69,23 +71,26 @@ This is the most important judgment call in this entire campaign. Let an agent r
 
 ### Step 1 — Build your real task board
 
-Make a living kanban for finishing YOUR game. Create `project/TASKBOARD.md`. Pull the real remaining work from `project/GAME.md` and your crew from `../../CREW.md`. Use **this template** (fill it with YOUR tasks — these are examples):
+Make a living kanban for finishing YOUR game. Create `project/TASKBOARD.md`. Pull the real remaining work from `project/GAME.md` and your crew from `../../CREW.md`. Use **this template** (fill it with YOUR tasks — these are examples, routed to the REAL crew by class):
 
 ```markdown
 # 🎮 TASKBOARD — Ship v1
 
-Owners: A = crew member · S = swarm agent · A+S = human drives, agent assists
+Owners: name = crew member · S = swarm agent · name+S = human drives, agent assists
+Route by class: art → Jonah · sound/hype → Leo · engineering/feel/QA → Zeppelin · 🤖 swarm → whoever leads AI Ops this Act.
 Human gate 🚦 = a human MUST approve before this ships.
 
 ## 📋 Backlog
 | # | Task | Owner | Produces | Done when… | 🚦 |
 |---|------|-------|----------|------------|----|
-| 1 | Decide the v1 power-up | S(designer→critic) → human | a chosen, scoped idea | written in GAME.md | 🚦 |
-| 2 | Write the power-up code | A+S(coder) | a Phaser snippet that runs | square grabs it, effect works | 🚦 |
-| 3 | Draft enemy behavior idea | S(designer) | one concrete idea | in GAME.md backlog |  |
-| 4 | Balance pass on scoring | A+S(critic) | tweak suggestions | numbers feel fair |  |
-| 5 | Write 3 marketing taglines | S(hype) → human | 3 options | 1 picked by crew | 🚦 |
-| 6 | Fix the known collision bug | A (best coder) | a passing fix | bug gone, no regressions | 🚦 |
+| 1 | Decide the v1 power-up | S(designer→critic) → Jonah | a chosen, scoped idea | written in GAME.md | 🚦 |
+| 2 | Write the power-up code | Zeppelin+S(coder) | a Phaser snippet that runs | square grabs it, effect works | 🚦 |
+| 3 | Draft enemy behavior idea | S(designer) → Jonah | one concrete idea | in GAME.md backlog |  |
+| 4 | Tune jump/movement feel | Zeppelin | tighter controls | feels good to move |  |
+| 5 | Write 3 marketing taglines | S(hype) → Leo | 3 options | 1 picked by crew | 🚦 |
+| 6 | Pick title-screen music vibe | Leo+S(hype) | a sound direction | Leo locks a vibe |  |
+| 7 | Player sprite + color palette | Jonah | art that fits the world | crew says "that's us" | 🚦 |
+| 8 | Fix the known collision bug | Zeppelin | a passing fix | bug gone, no regressions | 🚦 |
 
 ## 🔨 In Progress
 | # | Task | Owner | Notes |
@@ -97,10 +102,12 @@ Human gate 🚦 = a human MUST approve before this ships.
 ```
 
 **Routing logic you just applied** (this is the skill):
-- Pure *idea generation* → swarm (cheap, fast, low risk). Examples: tasks 1, 3, 5.
-- Anything *public-facing or hard to undo* → 🚦 human gate. Tasks 1, 2, 5, 6.
-- *Code that must actually run* → a human in the loop (A+S), because the agent drafts but a human verifies it works.
-- *Subjective "is it fun"* judgment → stays with the crew.
+- Pure *idea generation* → swarm first (cheap, fast, low risk), then the right human owns the call. Examples: tasks 1, 3, 5.
+- *Art / look-and-feel* (sprites, palette, vision) → **Jonah** (tasks 3, 7). *Sound / hype / taglines* → **Leo** (tasks 5, 6). *Engineering / game feel / QA* → **Zeppelin** (tasks 2, 4, 8). That mirrors your real classes in `../../CREW.md`.
+- The 🤖 swarm work itself is led by **whoever's on AI Ops rotation this Act** — they run the pipeline, the rest review the output.
+- Anything *public-facing or hard to undo* → 🚦 human gate. Tasks 1, 2, 5, 7, 8.
+- *Code that must actually run* → a human in the loop (name+S), because the agent drafts but a human verifies it works.
+- *Subjective "is it fun / does it fit us"* judgment → stays with the crew.
 
 ### Step 2 — Run ONE task end-to-end through the swarm
 
@@ -131,6 +138,8 @@ The task is 🚦. So **you** (a human) read the swarm's output and make the call
 - Move task #1 from **Backlog** → **Done** in `TASKBOARD.md`.
 
 You just orchestrated: decomposed → assigned to the swarm → got a handoff → checked it → applied a human gate → shipped it to the GDD. That's the entire loop, done for real.
+
+> ⚔️ **Zeppelin (Vanguard):** when a 🚦 task is "code that must run" (task 2, 8), you're the gate. The coder agent drafts a Phaser snippet — but YOU paste it in, run it, and feel whether it's actually fun. An agent can't tell if a jump feels floaty. You can. That instinct is the gate the swarm doesn't have.
 
 ## 🎮 Build-the-Game Tie-In
 

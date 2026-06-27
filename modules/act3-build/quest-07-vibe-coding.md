@@ -57,7 +57,7 @@ scene: { preload, create, update }
 
 | Function | When it runs | What goes here |
 |----------|-------------|----------------|
-| **`preload()`** | **Once**, at the start | Load assets — images, sounds. `this.load.image('hero', 'hero.png')`. The skeleton loads nothing yet (it draws shapes instead). |
+| **`preload()`** | **Once**, at the start | Load assets — images, sounds. `this.load.image('zeppelin', 'player.png')`. The skeleton loads nothing yet (it draws shapes instead). |
 | **`create()`** | **Once**, after preload | Build the world — make the player, the coin, the score text, set up collisions and keyboard input. This is your "set the stage." |
 | **`update()`** | **~60 times per second**, forever | The game loop — movement, checks, anything that happens "every frame." The skeleton reads arrow keys here and moves the player. |
 
@@ -79,9 +79,9 @@ Give it the **real file**, the **exact change**, and your **constraints**:
 Here's my Phaser 3 game (one file). [paste index.html]
 
 I want to change ONE thing: instead of collecting a coin, the falling
-circle should HURT the player and end the game on contact. Keep it
-Phaser 3, keep everything else working, and explain each change you make
-and WHY. Show me only the lines that change.
+note should HURT the player ('zeppelin', our runner) and end the game
+on contact. Keep it Phaser 3, keep everything else working, and explain
+each change you make and WHY. Show me only the lines that change.
 ```
 
 Why this prompt wins:
@@ -103,6 +103,8 @@ When AI hands you code back, before you paste:
 ### Ship ugly first
 
 Your slice should look like programmer art — colored rectangles and circles, exactly like the skeleton. **That's correct.** Pretty comes last. A slice you can *play* — even as squares — tells you whether your game is fun. A beautiful menu for a game that doesn't exist tells you nothing.
+
+> ⚔️ **Zeppelin (Vanguard):** while Jonah owns the *look*, you own the *feel*. Even as a plain square, movement can feel floaty or crisp — that's velocity, acceleration, and how fast it stops. You're the athlete; you know the difference between a control that feels tight and one that feels like ice. Tune the numbers (`240` → try `300`, add a little drag) and reload until moving the square just *feels good*. Nail that now, with squares, and the game's already half-won before a single sprite exists.
 
 ---
 
