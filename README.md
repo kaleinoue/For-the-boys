@@ -7,6 +7,9 @@
 > a game engine... and walk out having shipped a game the whole internet can play.
 > This one's yours, boys. (Meet your classes in **[CREW.md](CREW.md)**.)
 
+> 🧭 **Parent / organizer?** Read **[ORGANIZER.md](ORGANIZER.md)** instead — how to
+> give the boys access, run the campaign, and the (zero) cost. Boys: keep reading. 👇
+
 You and your crew are about to spend a few weeks becoming genuinely dangerous with
 AI — not "I asked ChatGPT to write my essay" dangerous, but "I built an army of
 agents that research, code, and ship for me" dangerous.
