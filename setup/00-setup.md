@@ -8,6 +8,12 @@ necessary part. Do it once, do it right, and never think about it again.
 **Mission:** Get every tool installed, every account made, and your crew assembled
 with roles.
 
+> ✅ **About the checkboxes:** the `- [ ]` boxes in this file (and in every Quest) are
+> a **follow-along checklist** — GitHub doesn't let you tap-to-save checkboxes inside
+> repo files, so just use them to keep your place as you work. Your **real, shared**
+> progress lives in the **[Crew Progress Tracker (Issue #1)](https://github.com/kaleinoue/For-the-boys/issues/1)**,
+> where the boxes *do* save when you tap them. Tick off **Q0** there once setup's done.
+
 ---
 
 ## 🛠️ Step 1 — Install the gear (~20 min)

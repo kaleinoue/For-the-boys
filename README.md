@@ -38,6 +38,11 @@ boss fights, loot, and a final showdown where your studio ships a game.
 - Some Quests have a **💀 Boss Challenge** — optional, harder, worth bonus XP and
   bragging rights.
 
+> ✅ **Track progress in the [Crew Progress Tracker (Issue #1)](https://github.com/kaleinoue/For-the-boys/issues/1)** — those
+> checkboxes save when you tap them. The `- [ ]` boxes *inside* the lesson files are
+> just follow-along lists (GitHub can't save clicks in repo files — it's a GitHub
+> thing, not you).
+
 You can do this **solo**, but it's built for a **crew of 2–6**. Building a game
 together is the whole point.
 
