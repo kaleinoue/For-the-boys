@@ -129,22 +129,37 @@ ${text}
 Return ONLY JSON:
 {"score": <integer 0-100>, "feedback": "<2-3 sentences, specific to THEIR answer, warm and a little hyped>", "tip": "<one concrete way to level it up>"}`;
 
-  try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_KEY}`;
-    const res = await fetch(url, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.4 } }),
-    });
-    if (!res.ok) throw new Error(`Gemini ${res.status}`);
-    const data = await res.json();
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    const parsed = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, ''));
-    const score = Math.max(0, Math.min(100, Math.round(parsed.score ?? 0)));
-    return { passed: score >= PASS_SCORE, score, feedback: parsed.feedback || 'Graded.', tip: parsed.tip || '' };
-  } catch (err) {
-    console.error('Grading error, using fallback:', err.message);
-    return mockGrade(step, text);
+  // Try the primary model, then a lighter model with higher free limits.
+  // Retry once on 429 (free-tier rate limit) before giving up to the mock grader.
+  const models = [...new Set([MODEL, 'gemini-2.0-flash-lite'])];
+  let lastErr = '';
+  for (const model of models) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let res;
+      try { res = await callGemini(model, prompt); }
+      catch (e) { lastErr = 'network: ' + e.message; break; }
+      if (res.status === 429) { lastErr = `429 rate limit on ${model}`; if (attempt === 0) { await sleep(1500); continue; } break; }
+      if (!res.ok) { lastErr = `${model} HTTP ${res.status}`; break; }
+      try {
+        const data = await res.json();
+        const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+        const parsed = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, ''));
+        const score = Math.max(0, Math.min(100, Math.round(parsed.score ?? 0)));
+        return { passed: score >= PASS_SCORE, score, feedback: parsed.feedback || 'Graded.', tip: parsed.tip || '' };
+      } catch (e) { lastErr = 'parse: ' + e.message; break; }
+    }
   }
+  console.error('Grading fell back to mock:', lastErr);
+  return mockGrade(step, text);
+}
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+async function callGemini(model, prompt) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
+  return fetch(url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.4 } }),
+  });
 }
 
 // Live check: is the Gemini key actually working? Reports the real error.
