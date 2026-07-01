@@ -109,6 +109,12 @@ generic game — build the one only this exact crew could make, and *finish it*.
 
 ## 📊 XP Tracker
 
+> ✅ **Want clickable checkboxes?** Use the **[live Crew Progress Tracker (Issue #1)](https://github.com/kaleinoue/For-the-boys/issues/1)** —
+> the boxes *in that issue* actually save when you tap them (sign in first). The table
+> below is a handy offline copy; to tick a box *here* you have to edit this file and
+> commit it. (Checkboxes in a normal repo file are never clickable — that's a GitHub
+> thing, not you.)
+
 Every Quest = **100 XP**. Boss Challenges and Achievements add bonus XP (each Quest
 tells you how much). Update after every session. (Jyana — you're the one who'll want
 to keep going; that energy is what keeps this board filling up. Just make sure you
