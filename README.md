@@ -8,6 +8,16 @@
 > whole internet can play. This one's yours, boys. (Meet your classes in
 > **[CREW.md](CREW.md)**.)
 
+<div align="center">
+
+### 📊 [**→ CREW PROGRESS TRACKER ←**](https://github.com/kaleinoue/For-the-boys/issues/1)
+
+[![Track your progress](https://img.shields.io/badge/Finished_a_Quest%3F-Tap_your_box_here-e8590c?style=for-the-badge&logo=github)](https://github.com/kaleinoue/For-the-boys/issues/1)
+
+*The scoreboard. Tap your box when you finish a Quest — it saves for the whole crew.*
+
+</div>
+
 > 🧭 **Parent / organizer?** Read **[ORGANIZER.md](ORGANIZER.md)** instead — how to
 > give the boys access, run the campaign, and the (zero) cost. Boys: keep reading. 👇
 
