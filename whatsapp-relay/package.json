@@ -1,0 +1,13 @@
+{
+  "name": "forge-whatsapp-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Posts THE FORGE crew updates into a WhatsApp group (unofficial; runs locally)",
+  "type": "commonjs",
+  "scripts": { "start": "node relay.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "whatsapp-web.js": "^1.26.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

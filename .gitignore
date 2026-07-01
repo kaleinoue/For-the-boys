@@ -21,6 +21,10 @@ build/
 # Forge app runtime data (shared progress store — regenerated at runtime)
 forge-app/data/progress.json
 
+# WhatsApp relay session/cache (never commit — it's a live login to your account)
+whatsapp-relay/.wwebjs_auth/
+whatsapp-relay/.wwebjs_cache/
+
 # OS / editor junk
 .DS_Store
 Thumbs.db
