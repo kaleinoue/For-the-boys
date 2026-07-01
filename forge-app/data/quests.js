@@ -10,6 +10,9 @@ const CREW = [
   { id: 'leo',      name: 'Leo',      klass: 'The Bard',      emoji: '🎵' },
   { id: 'jonah',    name: 'Jonah',    klass: 'The Artificer', emoji: '🎨' },
   { id: 'jyana',    name: 'Jyana',    klass: 'The Engine',    emoji: '🔋' },
+  // Hidden admin profile — reached via the Game Master passcode, not the hero
+  // select. Not shown on the roster or leaderboard.
+  { id: 'gm',       name: 'Game Master', klass: 'Admin · God Mode', emoji: '🛠️', hidden: true },
 ];
 
 // Rank ladder (min cumulative XP -> rank)

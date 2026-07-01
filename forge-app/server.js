@@ -35,6 +35,10 @@ const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
 const MODEL = process.env.FORGE_MODEL || 'gemini-2.0-flash';
 const PASS_SCORE = 60;
 
+// Game Master / admin passcode. Set ADMIN_CODE in your env; defaults otherwise.
+const ADMIN_CODE = process.env.ADMIN_CODE || 'forge-gm';
+const adminOK = (code) => !!code && code === ADMIN_CODE;
+
 // Supabase (optional). Use the SERVICE ROLE key — server-side only.
 const SB_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || '';
@@ -185,7 +189,36 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && url === '/api/quests') return sendJson(res, 200, publicQuests());
     if (req.method === 'GET' && url === '/api/state') return sendJson(res, 200, decorate(await store.getAll()));
-    if (req.method === 'POST' && url === '/api/reset') { await store.resetAll(); return sendJson(res, 200, decorate(await store.getAll())); }
+
+    // ---- Game Master / admin ----
+    if (req.method === 'POST' && url === '/api/admin/verify') {
+      const { code } = await readBody(req);
+      return sendJson(res, 200, { ok: adminOK(code) });
+    }
+    if (req.method === 'GET' && url === '/api/admin/rubrics') {
+      const code = new URL(req.url, 'http://x').searchParams.get('code');
+      if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
+      const rubrics = {}; for (const id in stepIndex) rubrics[id] = stepIndex[id].rubric;
+      return sendJson(res, 200, { rubrics });
+    }
+    if (req.method === 'POST' && url === '/api/admin/force') {
+      const { code, crewId, stepId } = await readBody(req);
+      if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
+      const step = stepIndex[stepId];
+      const state = await store.getAll();
+      const member = state.crew[crewId];
+      if (!step || !member) return sendJson(res, 400, { error: 'Unknown crew member or step.' });
+      member.steps[stepId] = { passed: true, score: 100, xp: step.xp, response: '[force-cleared by GM]', feedback: 'Force-cleared by the Game Master.', tip: '', at: Date.now() };
+      recomputeXp(member);
+      await store.putMember(crewId, member);
+      return sendJson(res, 200, { ok: true, state: decorate(state) });
+    }
+    if (req.method === 'POST' && url === '/api/reset') {
+      const { code } = await readBody(req);
+      if (!adminOK(code)) return sendJson(res, 403, { error: 'Reset requires the Game Master passcode.' });
+      await store.resetAll();
+      return sendJson(res, 200, decorate(await store.getAll()));
+    }
     if (req.method === 'POST' && url === '/api/grade') {
       const { crewId, stepId, response } = await readBody(req);
       const step = stepIndex[stepId];
@@ -218,5 +251,6 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`\n🔥 THE FORGE app running:  http://localhost:${PORT}`);
   console.log(`   Storage: ${USE_SUPABASE ? 'Supabase (shared, cross-device)' : 'local file (single server only)'}`);
-  console.log(`   AI judge: ${GEMINI_KEY ? 'Gemini (live)' : 'OFFLINE mock (set GEMINI_API_KEY for real grading)'}\n`);
+  console.log(`   AI judge: ${GEMINI_KEY ? 'Gemini (live)' : 'OFFLINE mock (set GEMINI_API_KEY for real grading)'}`);
+  console.log(`   Game Master passcode: ${process.env.ADMIN_CODE ? '(set via ADMIN_CODE)' : "DEFAULT 'forge-gm' — set ADMIN_CODE to change"}\n`);
 });
