@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🔥 THE FORGE</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Profile picker overlay -->
+  <div id="picker" class="overlay">
+    <div class="picker-card">
+      <h1>🔥 THE FORGE</h1>
+      <p class="sub">Who's forging today?</p>
+      <div id="picker-crew" class="picker-crew"><!-- filled by JS --></div>
+    </div>
+  </div>
+
+  <!-- Top bar -->
+  <header id="topbar" class="hidden">
+    <div class="brand">🔥 THE FORGE</div>
+    <div class="me">
+      <span id="me-emoji" class="me-emoji"></span>
+      <div class="me-info">
+        <div class="me-name"><span id="me-name"></span> · <span id="me-rank"></span></div>
+        <div class="xpbar"><div id="me-xpfill" class="xpfill"></div><span id="me-xptext" class="xptext"></span></div>
+      </div>
+      <button id="switch-btn" class="ghost-btn" title="Switch crew member">switch</button>
+    </div>
+  </header>
+
+  <main id="app" class="hidden">
+    <!-- Left: quest map -->
+    <nav id="map" class="map"></nav>
+
+    <!-- Center: current quest -->
+    <section id="quest" class="quest"></section>
+
+    <!-- Right: leaderboard -->
+    <aside id="board" class="board"></aside>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

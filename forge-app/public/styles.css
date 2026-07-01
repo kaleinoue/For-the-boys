@@ -1,0 +1,105 @@
+/* THE FORGE — prototype styles. Dark, ember-lit, gamey. Swap freely later. */
+:root{
+  --bg:#0d0d14; --panel:#15151f; --panel2:#1c1c2b; --line:#2a2a3d;
+  --ink:#ececf5; --muted:#9797ad; --ember:#e8590c; --ember2:#f5a623;
+  --good:#38b000; --bad:#e5484d; --blue:#42a5f5;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}
+.hidden{display:none !important}
+button{font-family:inherit;cursor:pointer}
+h1,h2,h3{margin:.2em 0}
+
+/* ---- profile picker ---- */
+.overlay{position:fixed;inset:0;background:radial-gradient(1200px 600px at 50% -10%,#241a12,#0d0d14 60%);
+  display:grid;place-items:center;z-index:50}
+.picker-card{text-align:center;padding:2rem}
+.picker-card h1{font-size:2.6rem;letter-spacing:3px}
+.picker-card .sub{color:var(--muted);margin-bottom:1.6rem}
+.picker-crew{display:flex;gap:1rem;flex-wrap:wrap;justify-content:center}
+.crew-pick{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  padding:1.1rem 1.3rem;width:150px;transition:.15s;color:var(--ink)}
+.crew-pick:hover{border-color:var(--ember);transform:translateY(-3px)}
+.crew-pick .emoji{font-size:2.4rem}
+.crew-pick .nm{font-weight:700;margin-top:.3rem}
+.crew-pick .kl{color:var(--muted);font-size:.82rem}
+.crew-pick .xp{color:var(--ember2);font-size:.8rem;margin-top:.4rem}
+
+/* ---- top bar ---- */
+#topbar{display:flex;align-items:center;justify-content:space-between;
+  padding:.6rem 1.1rem;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+.brand{font-weight:800;letter-spacing:2px}
+.me{display:flex;align-items:center;gap:.7rem}
+.me-emoji{font-size:1.8rem}
+.me-info{min-width:220px}
+.me-name{font-size:.9rem}
+.xpbar{position:relative;height:16px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:.2rem}
+.xpfill{height:100%;width:0;background:linear-gradient(90deg,var(--ember),var(--ember2));transition:width .6s}
+.xptext{position:absolute;inset:0;font-size:.7rem;display:grid;place-items:center;color:#fff;text-shadow:0 1px 2px #000}
+.ghost-btn{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:.35rem .6rem;font-size:.78rem}
+.ghost-btn:hover{color:var(--ink);border-color:var(--ember)}
+
+/* ---- layout ---- */
+#app{display:grid;grid-template-columns:270px 1fr 260px;gap:1rem;padding:1rem;max-width:1400px;margin:0 auto;align-items:start}
+@media(max-width:1000px){#app{grid-template-columns:1fr}.board{order:3}}
+
+/* ---- quest map ---- */
+.map{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:.6rem;position:sticky;top:70px}
+.act-title{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:1px;margin:.9rem .5rem .3rem}
+.q-btn{display:flex;align-items:center;gap:.5rem;width:100%;text-align:left;background:transparent;border:0;color:var(--ink);
+  padding:.5rem .55rem;border-radius:9px;font-size:.9rem}
+.q-btn:hover{background:var(--panel2)}
+.q-btn.active{background:var(--panel2);outline:1px solid var(--ember)}
+.q-tick{width:20px;height:20px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-size:.7rem;flex:0 0 auto}
+.q-tick.part{border-color:var(--ember2);color:var(--ember2)}
+.q-tick.done{border-color:var(--good);background:var(--good);color:#062}
+.q-code{color:var(--muted);font-size:.72rem;flex:0 0 auto}
+
+/* ---- quest panel ---- */
+.quest{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1.3rem 1.4rem;min-height:60vh}
+.quest .qhead{border-bottom:1px solid var(--line);padding-bottom:.7rem;margin-bottom:1rem}
+.quest .qhead .code{color:var(--ember2);font-weight:700;font-size:.8rem}
+.quest .qhead h2{font-size:1.5rem}
+.step{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:1rem 1.1rem;margin-bottom:1.1rem}
+.step .st-top{display:flex;justify-content:space-between;align-items:center;gap:.5rem}
+.step .st-title{font-weight:700}
+.step .st-xp{color:var(--ember2);font-size:.8rem;font-weight:700;white-space:nowrap}
+.step .prompt{color:#d6d6e6;margin:.6rem 0 .8rem;white-space:pre-wrap}
+.step textarea{width:100%;min-height:110px;resize:vertical;background:#0f0f18;border:1px solid var(--line);
+  border-radius:9px;color:var(--ink);padding:.7rem;font-family:inherit;font-size:.92rem}
+.step textarea:focus{outline:none;border-color:var(--ember)}
+.st-actions{display:flex;gap:.6rem;align-items:center;margin-top:.6rem}
+.submit-btn{background:linear-gradient(90deg,var(--ember),var(--ember2));border:0;color:#1a0d00;font-weight:800;
+  padding:.55rem 1.1rem;border-radius:9px;letter-spacing:.3px}
+.submit-btn:disabled{opacity:.5;cursor:default}
+.st-state{font-size:.82rem;color:var(--muted)}
+
+/* grade result card */
+.grade{margin-top:.8rem;border-radius:10px;padding:.8rem .9rem;border:1px solid var(--line);background:#0f0f18}
+.grade.pass{border-color:var(--good)}
+.grade.fail{border-color:var(--bad)}
+.grade .g-top{display:flex;justify-content:space-between;font-weight:700;margin-bottom:.3rem}
+.grade .g-score{color:var(--ember2)}
+.grade .g-fb{font-size:.9rem;color:#dcdce8}
+.grade .g-tip{font-size:.84rem;color:var(--muted);margin-top:.4rem}
+.spinner{display:inline-block;width:15px;height:15px;border:2px solid var(--line);border-top-color:var(--ember);
+  border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.done-badge{color:var(--good);font-weight:700}
+
+/* ---- leaderboard ---- */
+.board{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1rem;position:sticky;top:70px}
+.board h3{font-size:.95rem;margin-bottom:.6rem}
+.lb-row{display:flex;align-items:center;gap:.55rem;padding:.5rem;border-radius:9px}
+.lb-row.me{background:var(--panel2);outline:1px solid var(--ember)}
+.lb-row .lb-emoji{font-size:1.3rem}
+.lb-row .lb-nm{font-weight:700;font-size:.9rem}
+.lb-row .lb-meta{color:var(--muted);font-size:.75rem}
+.lb-row .lb-xp{margin-left:auto;color:var(--ember2);font-weight:800;font-size:.9rem}
+.lb-rank{font-size:.72rem;color:var(--muted)}
+.board .reset{margin-top:1rem;width:100%}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel2);
+  border:1px solid var(--ember);color:var(--ink);padding:.7rem 1.1rem;border-radius:10px;z-index:40;
+  box-shadow:0 8px 30px #000a;animation:pop .3s}
+@keyframes pop{from{transform:translate(-50%,10px);opacity:0}}

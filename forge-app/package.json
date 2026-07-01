@@ -1,0 +1,13 @@
+{
+  "name": "forge-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "THE FORGE — interactive, AI-graded quest app for the crew (prototype)",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

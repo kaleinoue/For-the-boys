@@ -18,6 +18,9 @@ node_modules/
 dist/
 build/
 
+# Forge app runtime data (shared progress store — regenerated at runtime)
+forge-app/data/progress.json
+
 # OS / editor junk
 .DS_Store
 Thumbs.db
