@@ -1,11 +1,22 @@
-# 🔥 THE FORGE — Interactive App (prototype)
+# 🔥 THE FORGE — RPG App
 
-An interactive, **AI-graded** version of the campaign. Each crew member picks their
-profile, works through the 16 Quests, types a response at each step, and an AI judge
-scores it and awards XP. Progress is **shared** — everyone sees the crew leaderboard.
+A browser **RPG** version of the campaign. Pick your hero, travel the quest map,
+and clear "trials" by typing responses — an **AI judge** scores each one, awards XP,
+and levels you up. Progress is **shared** across the crew (live guild leaderboard).
 
-> This is a working prototype / wireframe: full interaction end-to-end, intentionally
-> light on visual polish so you can layer UI on top. Nothing here is locked in.
+**Game feel:** hero-select screen, a 7-region world map with locked/unlocked quest
+nodes, XP bars, rank-ups (Noob → Forgemaster) with a level-up sequence, loot bursts,
+and procedural retro sound — all hand-built in HTML/CSS/JS (no engine, no art assets,
+deploys anywhere).
+
+### The RPG loop
+```
+Choose hero → World map → tap an unlocked quest node → read the trial →
+type your response → AI judge scores it → win XP + loot → level up → next node unlocks
+```
+
+Heroes = the crew and their classes: ⚔️ Zeppelin (Vanguard) · 🎵 Leo (Bard) ·
+🎨 Jonah (Artificer) · 🔋 Jyana (Engine).
 
 ---
 
@@ -87,10 +98,28 @@ on the server, never in the browser), and **shared progress** needs one central 
 - **Shared crew leaderboard** (polls every ~12s so crewmates' progress shows up)
 - Resubmit to beat your score; reset button for testing
 
-## 🔜 Easy next steps (when you add UI / features)
-- **Deploy** the Node app to a free host (Render/Railway/Glitch) so the crew uses it
-  from their phones — with Supabase already wired, progress is shared automatically.
-- Boss challenges (+50 XP), achievement badges, streaks, sound.
+## 🚀 Deploy it (free, so the crew plays from their phones)
+
+The app is a Node server, so it needs a Node host (not plain static hosting).
+**Render** has a free tier and reads the `render.yaml` in this repo:
+
+1. Push this repo to GitHub (done).
+2. Go to **[render.com](https://render.com)** → New → **Blueprint** → connect the repo
+   (or use the one-click link in `render.yaml`). It finds `render.yaml` automatically.
+3. In the new service's **Environment**, paste your secrets:
+   `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
+4. Deploy → you get a public URL like `https://the-forge.onrender.com`. Share it.
+
+> ⚠️ **Use Supabase when deployed.** Render's free filesystem is wiped on restart, so
+> the local-file store won't persist there — the Supabase store will. (Also, free
+> Render services sleep after inactivity and take ~30s to wake on the first hit.)
+> Railway / Glitch / Fly work too; any Node host is fine.
+
+## 🔜 Easy next steps
+- Boss challenges (+50 XP), achievement badges, streaks, daily quests.
+- Real hero art / animated sprites; a proper winding map path.
+- Login per hero (progress is trust-based right now).
+- Pull each quest's full multi-step content from its markdown into `quests.js`.
 - Auth so each kid logs in as themselves (right now the profile is trust-based).
 - Pull the full step-by-step content from each Quest's markdown into `quests.js`.
 

@@ -1,198 +1,226 @@
-// THE FORGE — frontend. Renders the campaign, submits responses, shows XP.
-// Talks to the server for AI grading + shared crew progress.
-
-let QUESTS = null;   // {crew, ranks, acts}
-let STATE = null;    // {crew:{id:{xp,rank,steps}}}
+// ================= THE FORGE — RPG frontend =================
+let QUESTS = null, STATE = null;
 let ME = localStorage.getItem('forge_crew_id') || null;
-let currentQuestId = null;
-
-const $ = (sel) => document.querySelector(sel);
+let openQuestId = null;
+const $ = (s) => document.querySelector(s);
+const REGION_COLORS = ['#ff6b1a','#ff4d8d','#8b5cf6','#22c1c3','#e5484d','#ffd15c'];
 
 // ---- boot -------------------------------------------------------------------
-(async function init() {
-  QUESTS = await fetch('/api/quests').then(r => r.json());
-  STATE = await fetch('/api/state').then(r => r.json());
-  renderPicker();
-  if (ME) enterApp();
-  // light polling so crewmates' progress shows up "live"
-  setInterval(refreshState, 12000);
+(async function init(){
+  makeEmbers();
+  QUESTS = await fetch('/api/quests').then(r=>r.json());
+  STATE  = await fetch('/api/state').then(r=>r.json());
+  buildHeroSelect();
+  wireChrome();
+  if (ME) enterGame();
+  setInterval(async ()=>{ STATE = await fetch('/api/state').then(r=>r.json());
+    if(ME){ renderHUD(); renderMap(); if(!$('#guild-modal').classList.contains('hidden')) renderGuild(); } }, 12000);
 })();
 
-async function refreshState() {
-  STATE = await fetch('/api/state').then(r => r.json());
-  if (ME) { renderMap(); renderBoard(); renderMe(); }
-}
-
-// ---- profile picker ---------------------------------------------------------
-function renderPicker() {
-  const wrap = $('#picker-crew');
-  wrap.innerHTML = '';
-  for (const c of QUESTS.crew) {
-    const m = STATE.crew[c.id] || { xp: 0, rank: { emoji: '🥚' } };
-    const b = document.createElement('button');
-    b.className = 'crew-pick';
-    b.innerHTML = `<div class="emoji">${c.emoji}</div><div class="nm">${c.name}</div>
-      <div class="kl">${c.klass}</div><div class="xp">${m.rank.emoji} ${m.xp} XP</div>`;
-    b.onclick = () => { ME = c.id; localStorage.setItem('forge_crew_id', c.id); enterApp(); };
-    wrap.appendChild(b);
-  }
-}
-
-function enterApp() {
-  $('#picker').classList.add('hidden');
-  $('#topbar').classList.remove('hidden');
-  $('#app').classList.remove('hidden');
-  $('#switch-btn').onclick = () => {
-    ME = null; localStorage.removeItem('forge_crew_id');
-    $('#picker').classList.remove('hidden');
-    $('#topbar').classList.add('hidden');
-    $('#app').classList.add('hidden');
-    renderPicker();
-  };
-  // default to first not-yet-done quest, else first quest
-  currentQuestId = firstUnfinishedQuest() || QUESTS.acts[0].quests[0].id;
-  renderMe(); renderMap(); renderQuest(); renderBoard();
-}
-
 // ---- helpers ----------------------------------------------------------------
-function meCrew() { return QUESTS.crew.find(c => c.id === ME); }
-function allQuests() { return QUESTS.acts.flatMap(a => a.quests); }
-function findQuest(id) { return allQuests().find(q => q.id === id); }
-function stepState(stepId) { return STATE.crew[ME]?.steps?.[stepId]; }
-
-function questStatus(q) {
-  const passed = q.steps.filter(s => stepState(s.id)?.passed).length;
-  if (passed === 0) return 'none';
-  if (passed === q.steps.length) return 'done';
-  return 'part';
+const crewById = (id)=>QUESTS.crew.find(c=>c.id===id);
+const flatQuests = ()=>QUESTS.acts.flatMap(a=>a.quests);
+const findQuest = (id)=>flatQuests().find(q=>q.id===id);
+const stepState = (id,sid)=>STATE.crew[id]?.steps?.[sid];
+function questStatus(id, q){
+  const p = q.steps.filter(s=>stepState(id,s.id)?.passed).length;
+  return p===0 ? 'none' : p===q.steps.length ? 'done' : 'part';
 }
-function firstUnfinishedQuest() {
-  for (const q of allQuests()) if (questStatus(q) !== 'done') return q.id;
-  return null;
+function isUnlocked(qid){
+  const list = flatQuests(); const i = list.findIndex(q=>q.id===qid);
+  if (i<=0) return true;
+  return questStatus(ME, list[i-1])==='done';
 }
-
-// ---- top bar (me) -----------------------------------------------------------
-function renderMe() {
-  const c = meCrew(); const m = STATE.crew[ME];
-  $('#me-emoji').textContent = c.emoji;
-  $('#me-name').textContent = c.name;
-  $('#me-rank').textContent = `${m.rank.emoji} ${m.rank.name}`;
-  const nextRank = QUESTS.ranks.find(r => r.min > m.xp);
-  const ceil = nextRank ? nextRank.min : m.xp || 1;
-  $('#me-xpfill').style.width = Math.min(100, (m.xp / ceil) * 100) + '%';
-  $('#me-xptext').textContent = nextRank ? `${m.xp} / ${nextRank.min} XP` : `${m.xp} XP · MAX`;
+function portrait(crew, small){
+  return `<div class="portrait ${small?'sm':''} acc-${crew.id}">${crew.emoji}</div>`;
 }
 
-// ---- quest map --------------------------------------------------------------
-function renderMap() {
-  const map = $('#map'); map.innerHTML = '';
-  for (const act of QUESTS.acts) {
-    const t = document.createElement('div'); t.className = 'act-title'; t.textContent = act.title; map.appendChild(t);
-    for (const q of act.quests) {
-      const st = questStatus(q);
-      const b = document.createElement('button');
-      b.className = 'q-btn' + (q.id === currentQuestId ? ' active' : '');
-      const tick = st === 'done' ? '✓' : st === 'part' ? '·' : '';
-      b.innerHTML = `<span class="q-tick ${st}">${tick}</span><span class="q-code">${q.code}</span><span>${q.title}</span>`;
-      b.onclick = () => { currentQuestId = q.id; renderMap(); renderQuest(); };
-      map.appendChild(b);
-    }
+// ---- title / hero select ----------------------------------------------------
+function buildHeroSelect(){
+  const wrap = $('#hero-select'); wrap.innerHTML='';
+  for(const c of QUESTS.crew){
+    const m = STATE.crew[c.id] || {xp:0,rank:{emoji:'🥚',name:'Noob'}};
+    const card = document.createElement('button');
+    card.className = `hero-card acc-${c.id}`;
+    card.innerHTML = `${portrait(c)}
+      <div class="hc-name">${c.name}</div>
+      <div class="hc-class">${c.emoji} ${c.klass}</div>
+      <div class="hc-stat">${m.rank.emoji} ${m.rank.name} · ${m.xp} XP</div>
+      <div class="hc-enter">▶ press to play</div>`;
+    card.onclick = ()=>{ initAudio(); sfx('select'); ME=c.id; localStorage.setItem('forge_crew_id',c.id); enterGame(); };
+    wrap.appendChild(card);
   }
 }
 
-// ---- quest panel ------------------------------------------------------------
-function renderQuest() {
-  const q = findQuest(currentQuestId);
-  const el = $('#quest');
-  const totalXp = q.steps.reduce((s, x) => s + x.xp, 0);
-  el.innerHTML = `<div class="qhead"><div class="code">${q.code} · ${totalXp} XP</div><h2>${q.title}</h2></div>`;
-  for (const step of q.steps) el.appendChild(renderStep(step));
+function enterGame(){
+  $('#screen-title').classList.add('hidden');
+  $('#screen-map').classList.remove('hidden');
+  renderHUD(); renderMap();
 }
 
-function renderStep(step) {
-  const prev = stepState(step.id);
-  const wrap = document.createElement('div'); wrap.className = 'step';
-  wrap.innerHTML = `
-    <div class="st-top"><span class="st-title">${step.title}</span><span class="st-xp">+${step.xp} XP</span></div>
-    <div class="prompt">${escapeHtml(step.prompt)}</div>
-    <textarea placeholder="Type your response...">${prev ? escapeHtml(prev.response) : ''}</textarea>
+function wireChrome(){
+  $('#btn-switch').onclick = ()=>{ sfx('click'); ME=null; localStorage.removeItem('forge_crew_id');
+    $('#screen-map').classList.add('hidden'); $('#screen-title').classList.remove('hidden'); buildHeroSelect(); };
+  $('#btn-guild').onclick = ()=>{ sfx('click'); renderGuild(); $('#guild-modal').classList.remove('hidden'); };
+  $('#btn-sound').onclick = (e)=>{ MUTED=!MUTED; localStorage.setItem('forge_muted',MUTED?'1':''); e.target.textContent = MUTED?'🔇':'🔊'; if(!MUTED){initAudio();sfx('click');} };
+  $('#btn-sound').textContent = MUTED?'🔇':'🔊';
+  $('#btn-reset').onclick = async ()=>{ if(!confirm('Wipe ALL crew progress? (testing)'))return;
+    STATE = await fetch('/api/reset',{method:'POST'}).then(r=>r.json()); renderHUD(); renderMap(); renderGuild(); };
+  document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>b.closest('.modal').classList.add('hidden'));
+  document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.classList.add('hidden'); }));
+}
+
+// ---- HUD --------------------------------------------------------------------
+function renderHUD(){
+  const c = crewById(ME), m = STATE.crew[ME];
+  const pt = $('#hud-portrait'); pt.className = `portrait sm acc-${c.id}`; pt.textContent = c.emoji;
+  $('#hud-name').textContent = `${c.name}`;
+  $('#hud-level').textContent = `${m.rank.emoji} ${m.rank.name}  ·  ${c.klass}`;
+  const next = QUESTS.ranks.find(r=>r.min>m.xp);
+  const ceil = next ? next.min : (m.xp||1);
+  $('#hud-xpfill').style.width = Math.min(100,(m.xp/ceil)*100)+'%';
+  $('#hud-xptext').textContent = next ? `${m.xp} / ${next.min} XP` : `${m.xp} XP · MAX`;
+}
+
+// ---- world map --------------------------------------------------------------
+function renderMap(){
+  const map = $('#map'); map.innerHTML='';
+  QUESTS.acts.forEach((act,ai)=>{
+    const anyUnlocked = act.quests.some(q=>isUnlocked(q.id));
+    const region = document.createElement('div');
+    region.className = 'region'+(anyUnlocked?'':' locked');
+    region.style.setProperty('--ra', REGION_COLORS[ai%REGION_COLORS.length]);
+    region.innerHTML = `<div class="region-head">
+        <span class="region-sigil">${anyUnlocked?'🗺️':'🔒'}</span>
+        <span class="region-name">${act.title}</span>
+        <span class="region-theme">${act.theme}</span>
+      </div>`;
+    const trail = document.createElement('div'); trail.className='trail';
+    for(const q of act.quests){
+      const st = questStatus(ME,q); const unlocked = isUnlocked(q.id);
+      const cls = !unlocked?'locked':st==='done'?'done':st==='part'?'part':'available';
+      const node = document.createElement('div'); node.className = `node ${cls}`;
+      const face = !unlocked?'🔒':st==='done'?'✓':q.code.replace('Q','');
+      node.innerHTML = `<div class="connector"></div><div class="medallion">${face}</div><div class="n-title">${q.title}</div>`;
+      node.querySelector('.medallion').onclick = ()=>{
+        if(!unlocked){ sfx('locked'); node.animate([{transform:'translateX(-4px)'},{transform:'translateX(4px)'},{transform:'translateX(0)'}],{duration:200});
+          toast('🔒 Clear the trial before it'); return; }
+        sfx('click'); openQuest(q.id);
+      };
+      trail.appendChild(node);
+    }
+    region.appendChild(trail); map.appendChild(region);
+  });
+}
+
+// ---- quest modal ------------------------------------------------------------
+function openQuest(qid){
+  openQuestId = qid;
+  const q = findQuest(qid);
+  const total = q.steps.reduce((s,x)=>s+x.xp,0);
+  $('#q-code').textContent = q.code; $('#q-title').textContent = q.title; $('#q-xp').textContent = `${total} XP`;
+  const box = $('#q-steps'); box.innerHTML='';
+  q.steps.forEach(step=>box.appendChild(renderStep(step)));
+  $('#quest-modal').classList.remove('hidden');
+}
+
+function renderStep(step){
+  const prev = stepState(ME, step.id);
+  const el = document.createElement('div'); el.className='step';
+  el.innerHTML = `<div class="st-top"><span class="st-title">⚔️ ${step.title}</span><span class="st-xp">+${step.xp} XP</span></div>
+    <div class="prompt">${esc(step.prompt)}</div>
+    <textarea placeholder="Write your response, hero...">${prev?esc(prev.response):''}</textarea>
     <div class="st-actions">
-      <button class="submit-btn">${prev?.passed ? 'Resubmit' : 'Submit for XP'}</button>
-      <span class="st-state">${prev ? (prev.passed ? `<span class="done-badge">✓ Passed · ${prev.xp} XP</span>` : 'Not passed yet — try again') : ''}</span>
+      <button class="pixel-btn submit">${prev?.passed?'⚒ RE-ATTEMPT':'⚔ ATTEMPT'}</button>
+      <span class="st-state">${prev?(prev.passed?`<span class="ok">✓ cleared · ${prev.xp} XP</span>`:'not cleared — try again'):''}</span>
     </div>
     <div class="grade-slot"></div>`;
-
-  const ta = wrap.querySelector('textarea');
-  const btn = wrap.querySelector('.submit-btn');
-  const slot = wrap.querySelector('.grade-slot');
-  if (prev) slot.appendChild(gradeCard(prev));
-
-  btn.onclick = async () => {
-    const response = ta.value.trim();
-    if (!response) { ta.focus(); return; }
-    btn.disabled = true; const label = btn.textContent; btn.innerHTML = '<span class="spinner"></span> grading';
-    try {
-      const data = await fetch('/api/grade', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ crewId: ME, stepId: step.id, response }),
-      }).then(r => r.json());
+  const ta=el.querySelector('textarea'), btn=el.querySelector('.submit'), slot=el.querySelector('.grade-slot');
+  if(prev) slot.appendChild(gradeCard(prev));
+  btn.onclick = async ()=>{
+    const response = ta.value.trim(); if(!response){ ta.focus(); return; }
+    const beforeRank = STATE.crew[ME].rank.name;
+    btn.disabled=true; const lbl=btn.textContent; btn.innerHTML='<span class="spinner"></span> judging';
+    try{
+      const data = await fetch('/api/grade',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({crewId:ME,stepId:step.id,response})}).then(r=>r.json());
       STATE = data.state;
-      slot.innerHTML = ''; slot.appendChild(gradeCard(data.result));
-      if (data.result.passed) toast(`✓ ${data.result.xpAwarded} XP awarded!`);
-      renderMe(); renderMap(); renderBoard();
-      wrap.querySelector('.st-state').innerHTML = data.result.passed
-        ? `<span class="done-badge">✓ Passed · ${data.result.xpAwarded} XP</span>`
-        : 'Not passed yet — try again';
-      btn.textContent = data.result.passed ? 'Resubmit' : 'Submit for XP';
-    } catch (e) {
-      slot.innerHTML = `<div class="grade fail"><div class="g-fb">Couldn't reach the grader. Is the server running?</div></div>`;
-      btn.textContent = label;
-    } finally { btn.disabled = false; }
+      slot.innerHTML=''; slot.appendChild(gradeCard(data.result));
+      const r=data.result;
+      el.querySelector('.st-state').innerHTML = r.passed?`<span class="ok">✓ cleared · ${r.xpAwarded} XP</span>`:'not cleared — try again';
+      btn.textContent = r.passed?'⚒ RE-ATTEMPT':'⚔ ATTEMPT';
+      if(r.passed){
+        sfx(r.score>=90?'crit':'win'); burstXP(btn, r.xpAwarded); toast(`✓ TRIAL CLEARED  +${r.xpAwarded} XP`);
+        const afterRank = STATE.crew[ME].rank.name;
+        if(afterRank!==beforeRank) levelUp(STATE.crew[ME].rank);
+      } else sfx('fail');
+      renderHUD(); renderMap();
+    }catch(e){ slot.innerHTML=`<div class="grade fail"><div class="g-fb">⚠ Couldn't reach the judge. Is the server running?</div></div>`; btn.textContent=lbl; }
+    finally{ btn.disabled=false; }
   };
-  return wrap;
+  return el;
 }
 
-function gradeCard(r) {
-  const d = document.createElement('div');
-  d.className = 'grade ' + (r.passed ? 'pass' : 'fail');
-  d.innerHTML = `<div class="g-top"><span>${r.passed ? '✓ Passed' : '✕ Keep going'}</span>
-      <span class="g-score">Score: ${r.score}/100</span></div>
-    <div class="g-fb">${escapeHtml(r.feedback || '')}</div>
-    ${r.tip ? `<div class="g-tip">💡 ${escapeHtml(r.tip)}</div>` : ''}`;
+function gradeCard(r){
+  const d=document.createElement('div'); d.className='grade '+(r.passed?'pass':'fail');
+  d.innerHTML=`<div class="g-top"><span class="${r.passed?'win':'lose'}">${r.passed?'✦ VICTORY':'✕ KEEP GOING'}</span>
+      <span class="g-score">${r.score}/100</span></div>
+    <div class="g-fb">${esc(r.feedback||'')}</div>
+    ${r.tip?`<div class="g-tip">💡 ${esc(r.tip)}</div>`:''}`;
   return d;
 }
 
-// ---- leaderboard ------------------------------------------------------------
-function renderBoard() {
-  const el = $('#board');
-  const rows = QUESTS.crew.map(c => ({ c, m: STATE.crew[c.id] }))
-    .sort((a, b) => b.m.xp - a.m.xp);
-  el.innerHTML = '<h3>🏆 Crew Leaderboard</h3>';
-  for (const { c, m } of rows) {
-    const passed = Object.values(m.steps || {}).filter(s => s.passed).length;
-    const row = document.createElement('div');
-    row.className = 'lb-row' + (c.id === ME ? ' me' : '');
-    row.innerHTML = `<span class="lb-emoji">${c.emoji}</span>
-      <div><div class="lb-nm">${c.name}</div><div class="lb-meta">${m.rank.emoji} ${m.rank.name} · ${passed} done</div></div>
-      <span class="lb-xp">${m.xp}</span>`;
-    el.appendChild(row);
-  }
-  const reset = document.createElement('button');
-  reset.className = 'ghost-btn reset'; reset.textContent = 'reset all progress';
-  reset.onclick = async () => {
-    if (!confirm('Wipe ALL crew progress? (prototype testing)')) return;
-    STATE = await fetch('/api/reset', { method: 'POST' }).then(r => r.json());
-    renderMe(); renderMap(); renderQuest(); renderBoard();
-  };
-  el.appendChild(reset);
+// ---- guild (leaderboard) ----------------------------------------------------
+function renderGuild(){
+  const list = $('#guild-list'); list.innerHTML='';
+  const rows = QUESTS.crew.map(c=>({c,m:STATE.crew[c.id]})).sort((a,b)=>b.m.xp-a.m.xp);
+  rows.forEach(({c,m},i)=>{
+    const passed=Object.values(m.steps||{}).filter(s=>s.passed).length;
+    const row=document.createElement('div'); row.className='g-row'+(c.id===ME?' me':'');
+    row.innerHTML=`<div class="g-rank-badge">#${i+1}</div>${portrait(c,true)}
+      <div><div class="g-nm acc-${c.id}" style="color:var(--accent)">${c.name}</div>
+        <div class="g-meta">${m.rank.emoji} ${m.rank.name} · ${passed}/17 trials</div></div>
+      <div class="g-xp">${m.xp} XP</div>`;
+    list.appendChild(row);
+  });
 }
 
-// ---- misc -------------------------------------------------------------------
-function escapeHtml(s) { return (s || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])); }
-let toastTimer;
-function toast(msg) {
-  clearTimeout(toastTimer);
-  let t = $('.toast'); if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
-  t.textContent = msg;
-  toastTimer = setTimeout(() => t.remove(), 2600);
+// ---- level up ---------------------------------------------------------------
+function levelUp(rank){
+  $('#lu-rank').textContent = `${rank.emoji}  ${rank.name}`;
+  $('#levelup').classList.remove('hidden'); sfx('levelup');
+  setTimeout(()=>$('#levelup').classList.add('hidden'), 2600);
+  $('#levelup').onclick=()=>$('#levelup').classList.add('hidden');
+}
+
+// ---- juice: particles, toast, embers, sound --------------------------------
+function burstXP(anchor, xp){
+  const r=anchor.getBoundingClientRect();
+  for(let i=0;i<6;i++){ const p=document.createElement('div'); p.className='particle'; p.textContent = i%2?'+XP':'✦';
+    p.style.left=(r.left+r.width/2+ (Math.random()*60-30))+'px'; p.style.top=(r.top-6)+'px';
+    p.style.animationDelay=(i*40)+'ms'; document.body.appendChild(p); setTimeout(()=>p.remove(),1200); }
+}
+let toastT; function toast(msg){ clearTimeout(toastT); let t=$('.toast'); if(!t){t=document.createElement('div');t.className='toast';document.body.appendChild(t);} t.textContent=msg; toastT=setTimeout(()=>t.remove(),2600); }
+function makeEmbers(){ const wrap=$('#embers'); for(let i=0;i<26;i++){ const e=document.createElement('div'); e.className='ember';
+  e.style.left=Math.random()*100+'vw'; e.style.setProperty('--dx',(Math.random()*40-20)+'px');
+  e.style.animationDuration=(6+Math.random()*8)+'s'; e.style.animationDelay=(-Math.random()*10)+'s';
+  e.style.opacity=(.2+Math.random()*.5); wrap.appendChild(e);} }
+function esc(s){return (s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+
+// ---- procedural sound (WebAudio, no files) ---------------------------------
+let AC=null, MUTED = localStorage.getItem('forge_muted')==='1';
+function initAudio(){ if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch{} } }
+function tone(freq,dur,type='square',vol=.06,when=0){ if(MUTED||!AC)return;
+  const t=AC.currentTime+when, o=AC.createOscillator(), g=AC.createGain();
+  o.type=type; o.frequency.value=freq; o.connect(g); g.connect(AC.destination);
+  g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  o.start(t); o.stop(t+dur); }
+function sfx(kind){ if(MUTED)return; initAudio();
+  if(kind==='select'){ tone(330,.08);tone(495,.1,'square',.06,.08); }
+  else if(kind==='click'){ tone(420,.05,'square',.04); }
+  else if(kind==='win'){ [523,659,784].forEach((f,i)=>tone(f,.12,'square',.06,i*.08)); }
+  else if(kind==='crit'){ [523,659,784,1047].forEach((f,i)=>tone(f,.13,'square',.07,i*.07)); }
+  else if(kind==='levelup'){ [392,523,659,784,1047].forEach((f,i)=>tone(f,.16,'triangle',.08,i*.1)); }
+  else if(kind==='fail'){ tone(220,.18,'sawtooth',.05); tone(160,.22,'sawtooth',.05,.1); }
+  else if(kind==='locked'){ tone(140,.12,'square',.05); }
 }

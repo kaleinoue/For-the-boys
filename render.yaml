@@ -1,0 +1,19 @@
+# Render Blueprint — deploys the Forge RPG app for free.
+# One-click: https://render.com/deploy?repo=https://github.com/kaleinoue/For-the-boys
+# Then paste your keys (GEMINI_API_KEY, SUPABASE_*) in the Render dashboard.
+services:
+  - type: web
+    name: the-forge
+    runtime: node
+    rootDir: forge-app
+    plan: free
+    buildCommand: npm install   # no dependencies — effectively a no-op
+    startCommand: node server.js
+    autoDeploy: true
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false             # set in dashboard (secret)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false

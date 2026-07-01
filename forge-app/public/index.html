@@ -3,43 +3,74 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🔥 THE FORGE</title>
+  <title>🔥 THE FORGE — RPG</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🔥</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <div id="embers" class="embers" aria-hidden="true"></div>
 
-  <!-- Profile picker overlay -->
-  <div id="picker" class="overlay">
-    <div class="picker-card">
-      <h1>🔥 THE FORGE</h1>
-      <p class="sub">Who's forging today?</p>
-      <div id="picker-crew" class="picker-crew"><!-- filled by JS --></div>
+  <!-- ============ TITLE / HERO SELECT ============ -->
+  <section id="screen-title" class="screen">
+    <div class="title-wrap">
+      <div class="crest">🔥</div>
+      <h1 class="game-title">THE FORGE</h1>
+      <p class="game-sub">— choose your hero —</p>
+      <div id="hero-select" class="hero-select"></div>
+      <p class="tagline">Bend AI to your will. Ship a game. Become a Forgemaster.</p>
+    </div>
+  </section>
+
+  <!-- ============ MAIN: HUD + WORLD MAP ============ -->
+  <section id="screen-map" class="screen hidden">
+    <header class="hud">
+      <div class="hud-hero">
+        <div class="portrait" id="hud-portrait"></div>
+        <div class="hud-info">
+          <div class="hud-name" id="hud-name"></div>
+          <div class="hud-level" id="hud-level"></div>
+          <div class="xpbar"><div class="xpfill" id="hud-xpfill"></div><span class="xptext" id="hud-xptext"></span></div>
+        </div>
+      </div>
+      <div class="hud-actions">
+        <button id="btn-guild" class="pixel-btn">🏆 GUILD</button>
+        <button id="btn-sound" class="pixel-btn" title="sound">🔊</button>
+        <button id="btn-switch" class="pixel-btn">↺ HERO</button>
+      </div>
+    </header>
+    <div class="map-scroll"><div id="map" class="map"></div></div>
+  </section>
+
+  <!-- ============ QUEST MODAL ============ -->
+  <div id="quest-modal" class="modal hidden">
+    <div class="modal-card quest-card">
+      <button class="modal-close" data-close>✕</button>
+      <div class="quest-banner"><span id="q-code" class="q-code"></span><h2 id="q-title"></h2><span id="q-xp" class="q-xp"></span></div>
+      <div id="q-steps" class="q-steps"></div>
     </div>
   </div>
 
-  <!-- Top bar -->
-  <header id="topbar" class="hidden">
-    <div class="brand">🔥 THE FORGE</div>
-    <div class="me">
-      <span id="me-emoji" class="me-emoji"></span>
-      <div class="me-info">
-        <div class="me-name"><span id="me-name"></span> · <span id="me-rank"></span></div>
-        <div class="xpbar"><div id="me-xpfill" class="xpfill"></div><span id="me-xptext" class="xptext"></span></div>
-      </div>
-      <button id="switch-btn" class="ghost-btn" title="Switch crew member">switch</button>
+  <!-- ============ GUILD (leaderboard) ============ -->
+  <div id="guild-modal" class="modal hidden">
+    <div class="modal-card guild-card">
+      <button class="modal-close" data-close>✕</button>
+      <h2 class="guild-title">🏆 The Guild</h2>
+      <div id="guild-list" class="guild-list"></div>
+      <button id="btn-reset" class="pixel-btn danger">reset all progress</button>
     </div>
-  </header>
+  </div>
 
-  <main id="app" class="hidden">
-    <!-- Left: quest map -->
-    <nav id="map" class="map"></nav>
-
-    <!-- Center: current quest -->
-    <section id="quest" class="quest"></section>
-
-    <!-- Right: leaderboard -->
-    <aside id="board" class="board"></aside>
-  </main>
+  <!-- ============ LEVEL-UP OVERLAY ============ -->
+  <div id="levelup" class="levelup hidden">
+    <div class="levelup-inner">
+      <div class="lu-burst">⭐</div>
+      <div class="lu-title">LEVEL UP!</div>
+      <div class="lu-rank" id="lu-rank"></div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
