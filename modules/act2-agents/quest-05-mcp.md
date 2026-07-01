@@ -110,9 +110,9 @@ Then:
 Read project/GAME.md from my For-the-boys repo and summarize our game in 3 bullets.
 ```
 
-Claude will ask permission to use the filesystem tool (approve it), then read your **real files** and answer about your **actual project**. The first time it reads the `GAME.md` that *Jonah, Leo, and Zeppelin* actually wrote and talks back about it, the lightbulb goes on: the AI is no longer guessing — it's grounded in your real work. *That's* MCP.
+Claude will ask permission to use the filesystem tool (approve it), then read your **real files** and answer about your **actual project**. The first time it reads the `GAME.md` that *Jonah, Leo, Zeppelin, and Jyana* actually wrote and talks back about it, the lightbulb goes on: the AI is no longer guessing — it's grounded in your real work. *That's* MCP.
 
-> 🎮 **Crew move:** Run this one together. It's the first time the AI reads the design all three of you built and reflects it back — Jonah hears whether the vision came through, Leo checks if the feel/rhythm is on the page, Zeppelin watches for what's actually buildable. One read, three sets of ears.
+> 🎮 **Crew move:** Run this one together. It's the first time the AI reads the design all four of you built and reflects it back — Jonah hears whether the vision came through, Leo checks if the feel/rhythm is on the page, Zeppelin watches for what's actually buildable, and Jyana listens for whether it's actually shippable — is there a clear next step to grind, or just a vague "make it better"? Four sets of ears.
 
 ### Troubleshooting
 
@@ -132,7 +132,7 @@ Be honest, not nice.
 
 Because it's reading the *actual* GDD (not a paste, not a guess), the feedback is grounded in what you really wrote. Take the best suggestion and update `project/GAME.md`. You're now design-reviewing with an AI that has your real context — exactly how you'll lock the concept in Quest 6.
 
-> 🤖 **AI Ops this Act:** Whoever's leading AI Ops drives the config and the restart, but the *review itself* is everyone's — don't let one person quietly accept the AI's notes. Read the feedback out loud, argue it, then Jonah/Leo/Zeppelin decide together what actually changes in `GAME.md`. The AI is an intern, not the director.
+> 🤖 **AI Ops this Act:** Whoever's leading AI Ops drives the config and the restart, but the *review itself* is everyone's — don't let one person quietly accept the AI's notes. Read the feedback out loud, argue it, then Jonah/Leo/Zeppelin/Jyana decide together what actually changes in `GAME.md`. The AI is an intern, not the director.
 
 ## 💀 Boss Challenge (+50 XP)
 

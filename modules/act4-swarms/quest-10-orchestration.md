@@ -29,7 +29,7 @@ That's the whole loop. Memorize it:
 
 Notice this is exactly what a good project lead does — you're just adding AI agents as some of the "doers."
 
-> 🤖 **Whose studio is it today?** The 🤖 AI Ops role rotates — check `../../CREW.md` for who's leading the swarm this Act. That person runs the orchestrator, but they don't get to *assign taste*: Jonah still owns "does it look like us," Leo owns "does it sound right," Zeppelin owns "does it feel good and not break." Orchestration is leading the crew, not replacing it.
+> 🤖 **Whose studio is it today?** The 🤖 AI Ops role rotates across all four of you — check `../../CREW.md` for who's leading the swarm this Act. That person runs the orchestrator, but they don't get to *assign taste*: Jonah still owns "does it look like us," Leo owns "does it sound right," Zeppelin owns "does it feel good and not break," and Jyana keeps the reps coming so nothing stalls. Orchestration is leading the crew, not replacing it.
 
 ### "One agent does everything" vs a planned pipeline
 
@@ -77,7 +77,7 @@ Make a living kanban for finishing YOUR game. Create `project/TASKBOARD.md`. Pul
 # 🎮 TASKBOARD — Ship v1
 
 Owners: name = crew member · S = swarm agent · name+S = human drives, agent assists
-Route by class: art → Jonah · sound/hype → Leo · engineering/feel/QA → Zeppelin · 🤖 swarm → whoever leads AI Ops this Act.
+Route by class: art → Jonah · sound/hype → Leo · engineering/feel/QA → Zeppelin · clearly-scoped grind → Jyana · 🤖 swarm → whoever leads AI Ops this Act.
 Human gate 🚦 = a human MUST approve before this ships.
 
 ## 📋 Backlog
@@ -91,6 +91,8 @@ Human gate 🚦 = a human MUST approve before this ships.
 | 6 | Pick title-screen music vibe | Leo+S(hype) | a sound direction | Leo locks a vibe |  |
 | 7 | Player sprite + color palette | Jonah | art that fits the world | crew says "that's us" | 🚦 |
 | 8 | Fix the known collision bug | Zeppelin | a passing fix | bug gone, no regressions | 🚦 |
+| 9 | Add a pause menu (P toggles it) | Jyana | a working pause overlay | P pauses/resumes, buttons work |  |
+| 10 | Wire up the 3 placeholder sound FX | Jyana | jump/coin/hit sounds firing | each event plays its clip |  |
 
 ## 🔨 In Progress
 | # | Task | Owner | Notes |
@@ -104,6 +106,7 @@ Human gate 🚦 = a human MUST approve before this ships.
 **Routing logic you just applied** (this is the skill):
 - Pure *idea generation* → swarm first (cheap, fast, low risk), then the right human owns the call. Examples: tasks 1, 3, 5.
 - *Art / look-and-feel* (sprites, palette, vision) → **Jonah** (tasks 3, 7). *Sound / hype / taglines* → **Leo** (tasks 5, 6). *Engineering / game feel / QA* → **Zeppelin** (tasks 2, 4, 8). That mirrors your real classes in `../../CREW.md`.
+- *Concrete, well-scoped grind* — a task with an obvious "done" that just needs someone to bulldoze it → **Jyana** (tasks 9, 10). Notice these are *sharp*: "add a pause menu (P toggles it)," not "make the game feel better." Scoped work is the fuel his engine runs on.
 - The 🤖 swarm work itself is led by **whoever's on AI Ops rotation this Act** — they run the pipeline, the rest review the output.
 - Anything *public-facing or hard to undo* → 🚦 human gate. Tasks 1, 2, 5, 7, 8.
 - *Code that must actually run* → a human in the loop (name+S), because the agent drafts but a human verifies it works.
@@ -140,6 +143,8 @@ The task is 🚦. So **you** (a human) read the swarm's output and make the call
 You just orchestrated: decomposed → assigned to the swarm → got a handoff → checked it → applied a human gate → shipped it to the GDD. That's the entire loop, done for real.
 
 > ⚔️ **Zeppelin (Vanguard):** when a 🚦 task is "code that must run" (task 2, 8), you're the gate. The coder agent drafts a Phaser snippet — but YOU paste it in, run it, and feel whether it's actually fun. An agent can't tell if a jump feels floaty. You can. That instinct is the gate the swarm doesn't have.
+
+> 🔋 **Jyana (Engine):** this whole quest is secretly about you. Orchestration is turning a big fuzzy goal ("finish the game") into clear next-steps — and a clear next-step is *exactly* the fuel your engine burns. Hand you "make it better" and the energy spins out; hand you "add a pause menu, P toggles it" (task 9) and you'll bulldoze it to done before anyone else has opened the file. So when you feel yourself stalling, that's not a lack of drive — it's a task that isn't scoped yet. Grab the crew, cut it into a concrete next-step, then floor it. Learning to aim your own drive is the level-up.
 
 ## 🎮 Build-the-Game Tie-In
 

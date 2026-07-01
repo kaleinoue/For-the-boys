@@ -78,7 +78,7 @@ You never need to touch `llm.py`. If the swarm works, it's because your *orchest
 
 You'll build a `swarm/` folder next to the agent starter and create three files: a roster of agents, an orchestrator, and a runner.
 
-> 🤖 **AI Ops is on rotation.** The 🤖 swarm role passes around the crew so nobody outsources learning AI. Check `../../CREW.md` for whose turn it is to lead AI Ops this Act — that's who owns building the swarm this quest. Zeppelin, Leo, or Jonah: tag in.
+> 🤖 **AI Ops is on rotation.** The 🤖 swarm role passes around the crew so nobody outsources learning AI. Check `../../CREW.md` for whose turn it is to lead AI Ops this Act — that's who owns building the swarm this quest. Zeppelin, Leo, Jonah, or Jyana: tag in.
 
 ### Step 1 — Make the folder and a quick sanity check
 
@@ -236,7 +236,7 @@ Then **actually use the output**:
 
 The swarm didn't decide FOR you. It gave your crew a sharper starting point than a blank page. That's the job.
 
-> 🎮 **Crew move:** the swarm just played AI-Jonah (idea), AI-Zeppelin (build + critique), and AI-Leo (hype) for you — fast and free. Now the REAL crew weighs in: Jonah checks if the idea fits the look, Zeppelin checks if it'll feel good to play, Leo checks if the tagline slaps. The agents draft; you three are the final cut.
+> 🎮 **Crew move:** the swarm just played AI-Jonah (idea), AI-Zeppelin (build + critique), and AI-Leo (hype) for you — fast and free. Now the REAL crew weighs in: Jonah checks if the idea fits the look, Zeppelin checks if it'll feel good to play, Leo checks if the tagline slaps — and Jyana's already itching to re-run it with a tweak. The agents draft; you four are the final cut.
 
 ## 💀 Boss Challenge (+50 XP)
 

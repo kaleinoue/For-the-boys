@@ -52,8 +52,9 @@ give me some game ideas
 **✅ Sharp prompt:**
 ```
 You're a senior indie game designer who ships small, addictive browser games.
-Brainstorm 10 original game ideas for a 3-person crew of beginner coders — an
-artist, a musician, and an athlete — building in Phaser 3 (a 2D JavaScript
+Brainstorm 10 original game ideas for a 4-person crew of beginner coders — an
+artist, a musician, an athlete, and a relentless engine who keeps us going —
+building in Phaser 3 (a 2D JavaScript
 engine). Each game must be finishable in 2–3 weeks, playable in a browser with
 arrow keys + one button, and have ONE hook that makes people replay it.
 
@@ -69,7 +70,7 @@ That sharp prompt wasn't luck. It had four parts. Memorize these and you'll neve
 
 - **R — Role:** Who should the AI *be*? → *"You're a senior indie game designer..."*
 - **A — Action:** What *exactly* do you want? → *"...brainstorm 10 original game ideas..."*
-- **C — Context:** What does it need to know? → *"...for an artist, a musician, and an athlete coding in Phaser 3, finishable in 2–3 weeks, arrow keys + one button..."*
+- **C — Context:** What does it need to know? → *"...for an artist, a musician, an athlete, and a relentless engine coding in Phaser 3, finishable in 2–3 weeks, arrow keys + one button..."*
 - **E — Expectations:** What should the output *look like*? → *"...as a table: Title | Pitch | Hook | Difficulty (1–5)."*
 
 Miss one and quality drops. No **Role** and the tone wanders. No **Context** and it gives you ideas for a 60-person AAA studio. No **Expectations** and you get a wall of prose you have to reorganize yourself.
@@ -111,10 +112,11 @@ This kicks off your capstone. Open a fresh chat and paste this (the full templat
 
 ```
 You're a senior indie game designer who has shipped dozens of small, addictive
-browser games. You're brainstorming with a new studio: three friends since
-childhood — an artist, a musician, and an athlete — who can read/write basic
-Python and JavaScript and will build in Phaser 3 (a 2D browser game engine,
-free). Lean into that combo: visuals, sound/rhythm, and tight game-feel/movement.
+browser games. You're brainstorming with a new studio: four friends since
+childhood — an artist, a musician, an athlete, and a relentless engine who keeps
+the crew moving — who can read/write basic Python and JavaScript and will build
+in Phaser 3 (a 2D browser game engine, free). Lean into that combo: visuals,
+sound/rhythm, tight game-feel/movement, and the drive to actually finish.
 
 Brainstorm 50 original browser-game ideas for us. Hard constraints:
 - 2D only, playable in a browser, controllable with arrow keys + one action button
@@ -132,7 +134,7 @@ Notice the last line — *asking it to ask you* surfaces what it's missing befor
 
 #### 🎮 Ideas built for THIS crew
 
-The AI's 50 will be generic until you steer it. You three have a freakish combo — **Jonah's art + Leo's music/rhythm + Zeppelin's movement & competition.** Most studios *can't* do all three. Feed the AI sparks like these (one punchy line each) and tell it to riff:
+The AI's 50 will be generic until you steer it. You four have a freakish combo — **Jonah's art + Leo's music/rhythm + Zeppelin's movement & competition + Jyana's relentless drive (it actually gets finished).** Most studios *can't* do all that. Feed the AI sparks like these (one punchy line each) and tell it to riff:
 
 - **Beat Runner** — an endless runner where the level pulses, scrolls, and spawns obstacles *on the beat*. Leo's track *is* the level design.
 - **One-Button Slam** — a stylish 1-button sports-arcade game (dunk / home-run / penalty-kick), all timing and juice. Zeppelin's playground.
@@ -151,7 +153,9 @@ reason it could be a hit AND the single biggest risk to building it.
 ```
 This pressure-tests your gut picks before you commit.
 
-> 🎮 **Crew move:** Vote with your strengths. Jonah picks the one he's dying to *draw*, Leo the one he can *score*, Zeppelin the one that'll *feel* best to play. The idea all three of you fight for is the one worth building.
+> 🎮 **Crew move:** Vote with your strengths. Jonah picks the one he's dying to *draw*, Leo the one he can *score*, Zeppelin the one that'll *feel* best to play. The idea all four of you fight for is the one worth building.
+
+> 🔋 **Jyana (Engine):** Somebody has to keep this from turning into a three-hour debate — that's you. Once two picks are neck-and-neck, your job is to push the crew to just *pick one and start*. A chosen idea only becomes a real game because someone's got the drive to floor it. Get a clear pick, then go.
 
 ---
 

@@ -70,6 +70,13 @@ Both matter. But don't confuse them: you can't "debug" boredom, and adding scree
 
 > ⚔️ **Zeppelin (Vanguard):** The difficulty curve and the *feel* of movement are your home turf — you're the athlete, you know when a jump lands a half-beat late or an enemy spawn is cheap. Own the tuning pass: enemy speed, spawn rate, jump weight. When a tester rage-quits at the same spot twice, that number is yours to fix until it feels fair.
 
+> 🔋 **Jyana (Engine):** Playtesting is reps, and reps are your fuel. Reset, run
+> the next tester, log it, reset again — the unglamorous loop that most crews bail
+> on halfway is exactly where you keep the whole thing moving. Then, when the triaged
+> "Fix First" list lands, you power down it one clear item at a time: *run it, log it,
+> fix the next one.* Hand yourself one scoped fix at a time and you'll grind the list
+> to zero.
+
 > ⚠️ **Real Talk:** AI is *great* at suggesting polish ("add a hit-flash, a coin pickup sound, and a combo counter") and *terrible* at knowing what's actually fun for *your* game. Fun is felt, not computed. Use AI to generate options and prioritize the obvious stuff — but the crew plays it and the crew decides. If the screenshake makes your game feel worse, delete it. No model can overrule your own hands on the keyboard.
 
 ### Using AI as your triage officer

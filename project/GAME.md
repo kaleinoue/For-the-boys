@@ -4,10 +4,11 @@
 > (after research). This is your studio's north star. When you're lost, come back
 > here. Keep it short — a GDD is a compass, not a novel.
 
-> 🎯 **Crew edge:** you've got an artist (Jonah), a musician (Leo), and an athlete
-> (Zeppelin). Build the game that shows that off — one that **looks great, sounds
-> great, and feels great to move in.** That's the unfair advantage most beginner
-> studios don't have. Use it.
+> 🎯 **Crew edge:** you've got an artist (Jonah), a musician (Leo), an athlete
+> (Zeppelin), and the engine who won't let you quit (Jyana). Build the game that
+> shows that off — one that **looks great, sounds great, feels great to move in, and
+> actually gets finished.** That's the unfair advantage most beginner studios don't
+> have. Use it.
 
 ---
 

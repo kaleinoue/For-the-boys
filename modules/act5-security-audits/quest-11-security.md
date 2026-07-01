@@ -76,7 +76,7 @@ Whatever you paste into an AI tool *leaves your machine*. So don't paste:
 
 For this project you're almost always pasting game ideas and public code — totally fine. Just build the reflex: *"would I be okay if this exact text were screenshotted?"*
 
-> 🎮 **Crew move:** you three have been friends since you were little, so it's easy to forget — don't paste a crewmate's real address, phone, or family stuff into an AI tool just because it's convenient for a marketing line. Leo's trailer credits and Jonah's itch.io page can use first names and "the crew"; keep the private details on your own machines.
+> 🎮 **Crew move:** you four have been friends since you were little, so it's easy to forget — don't paste a crewmate's real address, phone, or family stuff into an AI tool just because it's convenient for a marketing line. Leo's trailer credits and Jonah's itch.io page can use first names and "the crew"; keep the private details on your own machines.
 
 ### Prompt injection: a teaser (full fight in Quest 12)
 

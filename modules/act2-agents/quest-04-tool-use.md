@@ -136,7 +136,7 @@ There's a commented-out second example at the bottom of `agent.py`. Uncomment it
 
 ```python
 run("What day of the week is it, and tell me one fact about octopuses.")
-run("If our crew of 3 splits 240 enemy coins evenly, how many each — and what's a fun fact about the number you get?")
+run("If our crew of 4 splits 240 enemy coins evenly, how many each — and what's a fun fact about the number you get?")
 ```
 
 Run again and watch which tools it reaches for. Try to design a question that needs **two different tools in a row** — that's the agent flexing.
@@ -187,6 +187,8 @@ run("Roll 2d20 for me and tell me which roll was higher.")
 ```
 
 If you see it pick `roll_dice` and report real numbers — **you built a working tool and watched an agent use it.** That's the whole skill.
+
+> 🔋 **Jyana (Engine):** Now hammer it. Throw the agent ten different questions in a row and watch which tool it grabs each time — the point is reps until the loop is boring. Clear target ("does it pick the right tool?"), so this is the Engine's lane: keep firing runs until you've seen every tool fire.
 
 ### Troubleshooting
 

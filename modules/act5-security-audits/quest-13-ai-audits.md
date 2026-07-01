@@ -228,7 +228,9 @@ for i, r in enumerate(ranked, 1):
     print(f"    ↳ {r.get('reason','')}\n")
 print(f"WINNER → {ranked[0]['option']}")
 ```
-Run `python rank.py`. You now have a pipeline that **generates, scores, and ranks** automatically — and hands you a winner. Then (per the Real Talk) **eyeball the top 2 as a crew** before committing the winner to your game — the judge ranks, but Zeppelin, Leo, and Jonah make the call. Save the winner into `project/GAME.md` or `project/src/`.
+Run `python rank.py`. You now have a pipeline that **generates, scores, and ranks** automatically — and hands you a winner.
+
+> 🔋 **Jyana (Engine):** this is a grind that loves horsepower — don't stop at 5. Point the judge at *every* enemy table, *every* generated blurb, run it over option after option until the whole game is graded. Feeding it more to chew through is exactly where your relentless drive earns its keep (give it a clear target — "rank all the power-ups" — and go). Then (per the Real Talk) **eyeball the top 2 as a crew** before committing the winner to your game — the judge ranks, but Zeppelin, Leo, Jonah, and Jyana make the call. Save the winner into `project/GAME.md` or `project/src/`.
 
 ---
 

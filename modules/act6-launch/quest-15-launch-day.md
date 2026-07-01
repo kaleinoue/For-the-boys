@@ -13,10 +13,18 @@
 
 **⭐ XP on the line:** 100 base (+50 boss).
 
-> 🚀 **Crew finale — all three classes, one launch:** Jonah drives the *visual*
+> 🚀 **Crew finale — all four classes, one launch:** Jonah drives the *visual*
 > launch (logo, screenshots, the itch.io page art). Leo runs the *hype* (the trailer
 > plan and the launch post — your showman moment). Zeppelin ships the *deploy* and
-> tests it works on every device. This is everything you've built, going live.
+> tests it works on every device. Jyana drives *launch day itself* — pre-flight
+> checklist in hand, he keeps the crew moving box-by-box and won't let "eh, we'll ship
+> tomorrow" win. This is everything you've built, going live.
+
+> 🔋 **Jyana (Engine):** "Tomorrow" is where launches go to die, and killing that
+> excuse is your job today. You don't plan the launch — the checklist below already
+> does — you *run* it. Take the pre-flight list, put your foot down, and drag the crew
+> through every box until the link is live. A finished game nobody ships is just a
+> folder. You're the reason it actually goes out the door.
 
 ---
 
@@ -194,7 +202,7 @@ GAME: [title]
 PITCH: [one line — what it is]
 HOOK: [the one thing that makes it fun/replayable]
 CONTROLS: [e.g. arrow keys + space]
-MADE BY: [crew names — e.g. Jonah, Leo & Zeppelin], childhood friends who built
+MADE BY: [crew names — e.g. Jonah, Leo, Zeppelin & Jyana], childhood friends who built
          this in [X weeks] with AI + $0.
 VOICE: [pick: dry & funny / hype & loud / chill & confident / chaotic gremlin]
 PLAY IT: [your live URL]

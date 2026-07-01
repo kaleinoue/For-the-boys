@@ -9,7 +9,7 @@
 
 Up to now you've been typing into a chat box. That's fine for thinking, but you can't *build* on a chat box — you can't loop it, automate it, or give it tools. This quest is where you stop being a user of AI and start being a **builder** of AI. You're going to write code that calls a model directly through an API, and that one move unlocks the entire rest of the campaign: agents, swarms, the AI helpers that will design and test your game. Everything from here grows out of the tiny file you build today.
 
-> 🤖 **AI Ops this Act:** Someone takes point on AI Ops each Act while the other two pair in over their shoulder — Zeppelin's the natural lead here since he's the engineer, but the role **rotates** (nobody outsources learning AI). Whoever leads, the other two type along too. You all need this one in your hands.
+> 🤖 **AI Ops this Act:** Someone takes point on AI Ops each Act while the rest of the crew pairs in over their shoulder — Zeppelin's the natural lead here since he's the engineer, but the role **rotates** among all four (Zeppelin, Leo, Jonah, and Jyana — nobody outsources learning AI). Whoever leads, the others type along too. You all need this one in your hands.
 
 ## 🧠 The Briefing
 
@@ -158,11 +158,13 @@ Edit the bottom of `llm.py` (the `__main__` block) and try your own message — 
 ```python
 print(chat(
     [{"role": "user", "content": "Pitch me 3 power-up ideas for a fast platformer, one line each."}],
-    system="You are a punchy indie game designer working with a 3-person crew — an artist, a musician, and an athlete. No fluff.",
+    system="You are a punchy indie game designer working with a 4-person crew — an artist, a musician, an athlete, and a relentless engine who keeps us going. No fluff.",
 ))
 ```
 
 Run `python llm.py` again. Notice how the `system` argument changes the *vibe* of the reply. That `system` slot is going to become very important — it's how Quest 4 tells the agent which tools it's allowed to use.
+
+> 🔋 **Jyana (Engine):** Once it works, don't stop at one run — swap the message, run it again, swap it, run it again. This is exactly the kind of tight, clear task the Engine bulldozes: the goal is obvious ("make it reply"), so just floor it and stack the reps until wiring up a `chat()` call is muscle memory.
 
 ### Troubleshooting
 

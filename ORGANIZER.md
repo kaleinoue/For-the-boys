@@ -1,10 +1,10 @@
 # 🧭 Organizer / Parent — Start Here
 
-You set this up for **Zeppelin, Leo & Jonah**. This page is the one you read — not
-the boys. It covers what this is, how to give them access, how to run it, and how
+You set this up for **Zeppelin, Leo, Jonah & Jyana**. This page is the one you read
+— not the boys. It covers what this is, how to give them access, how to run it, and how
 to help without needing to know any of the tech yourself.
 
-> **TL;DR:** It's a self-paced, gamified AI course where the three of them build and
+> **TL;DR:** It's a self-paced, gamified AI course where the four of them build and
 > launch a real video game together. 16 lessons, 1–2 hours each. **It costs $0.**
 > Your only job: give them access (5 min, below) and keep the momentum up.
 
@@ -18,8 +18,9 @@ prompting, AI agents, automation, security, the works — by using those skills 
 
 - **Self-paced:** they read a lesson, do the hands-on part, log their XP, move on.
 - **Gamified:** XP, ranks, boss challenges, RPG "classes" matched to each kid's real
-  talent (Zeppelin/athlete, Leo/musician, Jonah/artist).
-- **Co-op:** built for the three of them to do *together*.
+  talent (Zeppelin/athlete, Leo/musician, Jonah/artist, Jyana/the-engine — motivated,
+  does best with a clear target).
+- **Co-op:** built for the four of them to do *together*.
 - **Real payoff:** at the end there's a live game on the internet with their names on
   it. That's the hook that keeps them going.
 
@@ -118,7 +119,9 @@ them back at their own toolkit:
 2. **"Did you paste it into the AI with context?"** (OS, what they were doing, the
    full error.) This solves ~80% of problems. The lessons drill this.
 3. **"Check the CHEATSHEET."** [CHEATSHEET.md](CHEATSHEET.md) has an "unstick ritual."
-4. **"Tag a crewmate."** It's co-op — one stuck kid, three brains.
+4. **"Tag a crewmate."** It's co-op — one stuck kid, four brains. (Jyana will want to
+   push straight on — the help *he* needs is a clear next step; give him that and
+   he'll drive it through.)
 
 If the *whole crew* is blocked on the same thing for more than a day, that's when to
 ask for outside help (a techy friend, or have them post the exact error somewhere).

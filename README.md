@@ -2,10 +2,11 @@
 
 ### An AI mastery campaign for a crew who'd rather *build* than get *replaced*.
 
-> 🎮 **Built for the crew: ZEPPELIN, LEO & JONAH.**
-> Three friends since childhood — an athlete, a musician, and an artist — walk into
-> a game engine... and walk out having shipped a game the whole internet can play.
-> This one's yours, boys. (Meet your classes in **[CREW.md](CREW.md)**.)
+> 🎮 **Built for the crew: ZEPPELIN, LEO, JONAH & JYANA.**
+> Four friends — an athlete, a musician, an artist, and the engine who won't let the
+> crew quit — walk into a game engine... and walk out having launched a game the
+> whole internet can play. This one's yours, boys. (Meet your classes in
+> **[CREW.md](CREW.md)**.)
 
 > 🧭 **Parent / organizer?** Read **[ORGANIZER.md](ORGANIZER.md)** instead — how to
 > give the boys access, run the campaign, and the (zero) cost. Boys: keep reading. 👇

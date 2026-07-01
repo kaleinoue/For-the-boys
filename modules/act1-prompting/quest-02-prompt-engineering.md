@@ -35,9 +35,9 @@ Think of it like a job: the **system prompt** is the contract and job descriptio
 
 ```
 For this whole conversation, you are a senior game designer who only suggests
-ideas a 3-person beginner team — an artist, a musician, and an athlete — can
-actually build in Phaser 3. Be blunt about scope. Never suggest 3D or
-multiplayer. Got it? Then wait for my first task.
+ideas a 4-person beginner team — an artist, a musician, an athlete, and a
+relentless engine who keeps us going — can actually build in Phaser 3. Be blunt
+about scope. Never suggest 3D or multiplayer. Got it? Then wait for my first task.
 ```
 
 Everything after that inherits those rules. When you write real agent code in Act 2, the system prompt becomes an actual separate field — same idea, now it's structural.
@@ -52,7 +52,7 @@ allergic to feature creep and you've killed a hundred bloated designs. Be terse.
 ```
 A persona isn't a costume — it changes the *substance* of the answer. "Marge" will flag scope problems a generic assistant glosses over.
 
-> ⚔️ **Zeppelin (Vanguard):** This is your weapon. You run QA — keep a "Marge" persona on standby and point her at every feature the crew gets excited about: *"Marge, is this in scope for a 3-person beginner team, or are we kidding ourselves?"* Her job is to kill the bloat before it costs you the ship date.
+> ⚔️ **Zeppelin (Vanguard):** This is your weapon. You run QA — keep a "Marge" persona on standby and point her at every feature the crew gets excited about: *"Marge, is this in scope for a 4-person beginner team, or are we kidding ourselves?"* Her job is to kill the bloat before it costs you the ship date.
 
 ### Few-shot examples (show, don't tell)
 
@@ -160,10 +160,12 @@ This is the main event. Open `../../project/GAME.md` and read the template's sec
 
 ```
 You are a senior game designer helping a beginner studio fill out a Game Design
-Document. The studio is three friends since childhood: Jonah (artist — owns the
-look & feel), Leo (musician — owns sound, music, and rhythm), and Zeppelin
-(athlete — owns movement, game-feel, and difficulty). We're building a 2D browser
-game in Phaser 3. Our chosen concept: [paste your one shortlisted idea].
+Document. The studio is four friends since childhood: Jonah (artist — owns the
+look & feel), Leo (musician — owns sound, music, and rhythm), Zeppelin
+(athlete — owns movement, game-feel, and difficulty), and Jyana (the engine —
+relentless drive who grinds clearly-scoped tasks to done and keeps the crew from
+stalling). We're building a 2D browser game in Phaser 3. Our chosen concept:
+[paste your one shortlisted idea].
 
 Interview me to fill out this GDD, ONE question at a time. After each answer, ask
 the next question. Cover, in order: the one-liner, the fun hook, the core loop
@@ -179,6 +181,8 @@ One question at a time is the magic — it drags real decisions out of you inste
 
 ### Step 3 — Write the first draft into GAME.md
 Take the AI's final markdown and **fill in `../../project/GAME.md`**. Edit freely — it's *your* game, the AI is a co-writer, not the boss. This is a **DRAFT**. You'll lock it for real in Quest 6 after you research competitors and tech. Leave the "Who does what" table for your crew to assign.
+
+> 🔋 **Jyana (Engine):** A locked GDD is what turns your drive into shipped work — a fuzzy "let's make it good" gives you nothing to floor. Once the draft's down, grab the crew's most concrete next step (even something small like "list the exact controls") and *bulldoze it to done*. A clear target is all the fuel you need.
 
 ---
 

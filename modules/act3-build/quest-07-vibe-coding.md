@@ -124,6 +124,8 @@ Make tiny edits by hand so you *own* the file:
 - Change the score text wording (`'Score: 0'` → e.g. `'Coins: 0'`).
 - Reload the browser after each save. Feel the loop: **edit → save → reload.**
 
+> 🔋 **Jyana (Engine):** this loop is your fuel. Edit → save → reload is a rep, and reps are where you shine — you'll run twenty of them before anyone else has run five. Point that drive at one clear tweak at a time and just keep flooring it; the crew ships fast because you don't let the momentum die.
+
 ### Step 3 — Bring in AI for the core mechanic
 Pick the ONE mechanic from your locked GDD. Use the prompt template from Loot below. Examples of "one mechanic" slices:
 - **Dodge game:** the circle falls from the top; touching it ends the game.

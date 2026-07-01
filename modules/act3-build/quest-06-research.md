@@ -17,7 +17,7 @@
 
 Every studio that dies usually dies the same way: they picked a game that was too big, or built something nobody wanted, because they never actually *looked*. Research is how you find the **smallest fun version** of your idea before you waste a month coding the wrong thing.
 
-> 🎮 **Crew move — divide the research:** Leo (Bard) leads the dig — he runs the chats, triangulates the claims, keeps the receipts. Jonah (Artificer) owns the look-and-feel decisions that come out of it: which art style is actually buildable, what the game *reads* like. Zeppelin (Vanguard) red-teams the scope — he's the one asking "can we actually ship this?" and breaking the plan on purpose so it doesn't break later. You're researching a game that has to show off all three of you at once: art, music, and movement. Keep that target in front of you.
+> 🎮 **Crew move — divide the research:** Leo (Bard) leads the dig — he runs the chats, triangulates the claims, keeps the receipts. Jonah (Artificer) owns the look-and-feel decisions that come out of it: which art style is actually buildable, what the game *reads* like. Zeppelin (Vanguard) red-teams the scope — he's the one asking "can we actually ship this?" and breaking the plan on purpose so it doesn't break later. Jyana (Engine) is the horsepower — hand him a clear question to run down and he grinds it out, and he keeps the dig moving when the crew's energy dips. You're researching a game that has to show off all four of you at once: art, music, movement, and the relentless drive that actually gets it finished. Keep that target in front of you.
 
 But here's the trap: AI will happily invent "facts" with total confidence. A hallucinated stat sounds exactly like a real one. The crews that win aren't the ones who ask AI the most questions — they're the ones who **verify the answers**. Today you learn to use AI as a research engine *and* a lie detector.
 
@@ -92,9 +92,10 @@ Your **Must have** should be small enough to build in this Act. If you can't des
 
 A great test prompt:
 ```
-You're a senior indie dev mentoring a 3-person crew who know basic JS
-and are using Phaser 3 — an artist, a musician, and an athlete who
-wants the game to FEEL good to move in. Here's our game idea: [paste].
+You're a senior indie dev mentoring a 4-person crew who know basic JS
+and are using Phaser 3 — an artist, a musician, an athlete who
+wants the game to FEEL good to move in, and a relentless engine who
+keeps us shipping. Here's our game idea: [paste].
 What is the ABSOLUTE smallest version that's still fun AND still shows
 off art + music + tight movement? What should we cut to ship it in two
 weeks? Be specific about what's hard in Phaser.

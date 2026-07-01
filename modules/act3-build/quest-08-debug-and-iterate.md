@@ -90,8 +90,11 @@ main (the real game, always works)
 > - `zeppelin/add-double-jump` — Vanguard tuning the movement
 > - `leo/title-music` — Bard wiring up the sound
 > - `jonah/player-sprite` — Artificer dropping in real art
+> - `jyana/pause-menu` — Engine grinding a clear task to done
 >
-> Three branches, three lanes, no stepping on each other. When you `git branch` and see all three names side by side, that's the studio working in parallel.
+> Four branches, four lanes, no stepping on each other. When you `git branch` and see all four names side by side, that's the studio working in parallel.
+
+> 🔋 **Jyana (Engine):** hand you a scoped branch like `jyana/pause-menu` or `jyana/restart-button` and you'll grind it to *done* faster than anyone — that relentless motor is your superpower. Watch for the tell: when you're not sure what to build next and the drive starts spinning, that's not "you're stuck," that's the signal to break the work into a clearer, smaller task. Get the next concrete step, *then* floor it.
 
 ### The 8 commands you'll actually use
 
