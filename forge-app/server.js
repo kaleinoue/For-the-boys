@@ -147,6 +147,17 @@ Return ONLY JSON:
   }
 }
 
+// Live check: is the Gemini key actually working? Reports the real error.
+async function geminiPing() {
+  if (!GEMINI_KEY) return { keyPresent: false, ok: false, note: 'GEMINI_API_KEY is empty/not set on this server.' };
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_KEY}`;
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }) });
+    if (!res.ok) return { keyPresent: true, ok: false, status: res.status, error: (await res.text()).slice(0, 300) };
+    return { keyPresent: true, ok: true };
+  } catch (e) { return { keyPresent: true, ok: false, error: String(e.message) }; }
+}
+
 function mockGrade(step, text) {
   const words = text.split(/\s+/).filter(Boolean).length;
   const score = Math.min(100, 30 + words * 4);
@@ -212,6 +223,11 @@ const server = http.createServer(async (req, res) => {
       recomputeXp(member);
       await store.putMember(crewId, member);
       return sendJson(res, 200, { ok: true, state: decorate(state) });
+    }
+    if (req.method === 'GET' && url === '/api/admin/health') {
+      const code = new URL(req.url, 'http://x').searchParams.get('code');
+      if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
+      return sendJson(res, 200, { storage: USE_SUPABASE ? 'supabase' : 'file', model: MODEL, gemini: await geminiPing() });
     }
     if (req.method === 'POST' && url === '/api/reset') {
       const { code } = await readBody(req);
