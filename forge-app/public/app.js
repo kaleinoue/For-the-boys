@@ -60,6 +60,7 @@ function enterGame(){
   $('#screen-title').classList.add('hidden');
   $('#screen-map').classList.remove('hidden');
   renderAdminBar(); renderHUD(); renderMap();
+  updateMusicBtn(); startMusic();
 }
 
 async function loginGM(){
@@ -71,7 +72,7 @@ async function loginGM(){
   STATE = await fetch('/api/state').then(x=>x.json());
   sfx('levelup'); enterGame();
 }
-function logoutGM(){ GM_CODE=null; localStorage.removeItem('forge_gm_code'); ME=null; localStorage.removeItem('forge_crew_id');
+function logoutGM(){ stopMusic(); GM_CODE=null; localStorage.removeItem('forge_gm_code'); ME=null; localStorage.removeItem('forge_crew_id');
   $('#admin-bar').classList.add('hidden'); $('#screen-map').classList.add('hidden'); $('#screen-title').classList.remove('hidden'); buildHeroSelect(); }
 
 function renderAdminBar(){
@@ -89,7 +90,8 @@ function renderAdminBar(){
 
 function wireChrome(){
   $('#btn-gm').onclick = ()=>{ initAudio(); loginGM(); };
-  $('#btn-switch').onclick = ()=>{ sfx('click'); ME=null; localStorage.removeItem('forge_crew_id');
+  $('#btn-music').onclick = ()=>{ MUS_ON=!MUS_ON; localStorage.setItem('forge_music', MUS_ON?'1':'0'); updateMusicBtn(); MUS_ON?startMusic():stopMusic(); };
+  $('#btn-switch').onclick = ()=>{ sfx('click'); stopMusic(); ME=null; localStorage.removeItem('forge_crew_id');
     $('#admin-bar').classList.add('hidden'); $('#screen-map').classList.add('hidden'); $('#screen-title').classList.remove('hidden'); buildHeroSelect(); };
   $('#btn-guild').onclick = ()=>{ sfx('click'); renderGuild(); $('#guild-modal').classList.remove('hidden'); };
   $('#btn-sound').onclick = (e)=>{ MUTED=!MUTED; localStorage.setItem('forge_muted',MUTED?'1':''); e.target.textContent = MUTED?'🔇':'🔊'; if(!MUTED){initAudio();sfx('click');} };
@@ -277,3 +279,38 @@ function sfx(kind){ if(MUTED)return; initAudio();
   else if(kind==='fail'){ tone(220,.18,'sawtooth',.05); tone(160,.22,'sawtooth',.05,.1); }
   else if(kind==='locked'){ tone(140,.12,'square',.05); }
 }
+
+// ---- background chiptune (synthesized — free, no files) --------------------
+let MUS_ON = localStorage.getItem('forge_music') !== '0';   // default on
+let musGain=null, musTimer=null, musNext=0, musStep=0;
+const MUS_BPM=100, MUS_STEP=60/MUS_BPM/2;                    // eighth notes
+// Gentle looping progression (Am–F–C–G), one bar each — classic adventurey NES feel.
+const CHORDS=[
+  {bass:110.00, notes:[220.00,261.63,329.63]}, // Am
+  {bass: 87.31, notes:[174.61,220.00,261.63]}, // F
+  {bass:130.81, notes:[261.63,329.63,392.00]}, // C
+  {bass: 98.00, notes:[196.00,246.94,293.66]}, // G
+];
+function musInit(){ initAudio(); if(AC && !musGain){ musGain=AC.createGain(); musGain.gain.value=0.05; musGain.connect(AC.destination); } }
+function musVoice(freq,dur,type,vol,at){ if(!AC||!musGain)return;
+  const o=AC.createOscillator(), g=AC.createGain(); o.type=type; o.frequency.value=freq; o.connect(g); g.connect(musGain);
+  g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(vol,at+0.01); g.gain.exponentialRampToValueAtTime(0.0001,at+dur);
+  o.start(at); o.stop(at+dur); }
+function musPlayStep(s,at){
+  const ch=CHORDS[Math.floor(s/8)%CHORDS.length], e=s%8;
+  if(e%2===0) musVoice(ch.bass, MUS_STEP*1.8, 'triangle', 0.5, at);           // bass on quarters
+  musVoice(ch.notes[e%ch.notes.length], MUS_STEP*0.9, 'square', 0.28, at);    // arpeggio
+  if(e===0) musVoice(ch.notes[2]*2, MUS_STEP*0.85, 'square', 0.16, at);       // little lead accent
+}
+function musSchedule(){ if(!AC)return; while(musNext < AC.currentTime + 0.15){ musPlayStep(musStep, musNext); musNext+=MUS_STEP; musStep++; } }
+function startMusic(){
+  if(!MUS_ON) return; musInit(); if(!AC) return;
+  if(AC.state==='suspended'){                                                 // needs a user gesture first
+    const go=()=>{ AC.resume(); document.removeEventListener('pointerdown',go); document.removeEventListener('keydown',go); reallyStartMusic(); };
+    document.addEventListener('pointerdown',go); document.addEventListener('keydown',go); return;
+  }
+  reallyStartMusic();
+}
+function reallyStartMusic(){ if(musTimer||!AC) return; musNext=AC.currentTime+0.1; musStep=0; musTimer=setInterval(musSchedule,30); }
+function stopMusic(){ if(musTimer){ clearInterval(musTimer); musTimer=null; } }
+function updateMusicBtn(){ const b=$('#btn-music'); if(b){ b.textContent='🎵'; b.style.opacity=MUS_ON?'1':'.4'; b.title=MUS_ON?'music: on':'music: off'; } }
