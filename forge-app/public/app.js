@@ -134,10 +134,10 @@ function launchBattle(){
     onWin: async (res)=>{
       const d=await fetch('/api/battle/win',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({crewId:ME,questId:'train'+qi,xp:res.xp,loot:res.loot})}).then(r=>r.json());
-      if(d.state) STATE=d.state;
-      startMusic(); renderHUD(); renderMap();
-      toast(`+${res.xp} XP · ${res.loot.length} loot — check 🎒 GEAR`);
+      if(d.state) STATE=d.state; renderHUD(); renderMap();
     },
+    onContinue: (res)=>{ startMusic(); toast(`+${res.xp} XP · ${res.loot.length} loot — check 🎒 GEAR`); },
+    onInventory: (resume)=>openInventoryOverlay(resume),
     onExit: ()=>{ startMusic(); } });
 }
 
@@ -152,16 +152,18 @@ function launchQuestBattle(qid){
   const dialog = (window.BATTLE.QUEST_DIALOG && window.BATTLE.QUEST_DIALOG[qid]) || window.BATTLE.GENERIC_DIALOG;
   const prof = profileOf(ME); stopMusic();
   window.ForgeBattle.start({ classId: battleClass(), questIndex: idx, equipped: prof.equipped, dialog,
-    onWin: async (res)=>{
+    onWin: async (res)=>{                                // persist loot so it's equippable on the victory screen
       const d = await fetch('/api/battle/win',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({crewId:ME,questId:qid,xp:res.xp,loot:res.loot})}).then(r=>r.json());
-      if(d.state) STATE=d.state;
-      startMusic(); renderHUD(); renderMap();
-      toast(`⚔ Battle won! +${res.xp} XP · ${res.loot.length} loot`);
-      openQuest(qid);                                    // now the trial
+      if(d.state) STATE=d.state; renderHUD(); renderMap();
     },
+    onContinue: (res)=>{ startMusic(); toast(`⚔ Battle won! +${res.xp} XP · ${res.loot.length} loot`); openQuest(qid); },
+    onInventory: (resume)=>openInventoryOverlay(resume),
     onExit: ()=>{ startMusic(); renderMap(); } });
 }
+let pendingBattleResume=null;
+function openInventoryOverlay(resume){ pendingBattleResume = resume || null; renderGear(); $('#gear-modal').classList.remove('hidden'); }
+function closeGear(){ $('#gear-modal').classList.add('hidden'); if(pendingBattleResume){ const r=pendingBattleResume; pendingBattleResume=null; r(profileOf(ME).equipped); } }
 
 function wireChrome(){
   $('#btn-gm').onclick = ()=>{ initAudio(); loginGM(); };
@@ -179,6 +181,8 @@ function wireChrome(){
     STATE = r; renderHUD(); renderMap(); renderGuild(); };
   document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>b.closest('.modal').classList.add('hidden'));
   document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.classList.add('hidden'); }));
+  // closing the gear screen resumes a paused battle and re-applies stats
+  $('#gear-modal').addEventListener('click', e=>{ if(e.target.matches('[data-close]')||e.target===$('#gear-modal')) closeGear(); });
 }
 
 // ---- HUD --------------------------------------------------------------------

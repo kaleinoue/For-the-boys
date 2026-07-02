@@ -18,20 +18,20 @@
     const cls = B.CLASSES[opts.classId] || B.CLASSES.zeppelin;
     const plan = B.battlePlan(opts.questIndex || 0);
     const dialog = (opts.dialog && opts.dialog.length ? opts.dialog : B.GENERIC_DIALOG).slice();
-    const stats = statsFor(opts.classId, opts.equipped);
+    let stats = statsFor(opts.classId, opts.equipped);
 
     // ---- build DOM ----
     let root = document.getElementById('battle-root');
     if (!root) { root = document.createElement('div'); root.id = 'battle-root'; document.body.appendChild(root); }
     root.innerHTML = `
       <canvas id="battle-canvas"></canvas>
-      <div class="b-hud"><span class="b-hearts"></span><span class="b-wave"></span></div>
+      <div class="b-hud"><span class="b-hearts"></span><button class="b-inv">🎒</button><span class="b-wave"></span></div>
       <div class="b-boss-wrap"><div class="b-boss-fill"></div></div>
       <div class="b-toast"></div>
       <div class="b-stick"><div class="nub"></div></div>
       <div class="b-btns"><button class="b-btn atk">ATK</button><button class="b-btn dodge">${cls.dodge === 'block' ? 'BLOCK' : 'DODGE'}</button></div>
       <div class="b-dialog"><div class="box"><div class="who">▸ THE FORGE</div><div class="line"></div><div class="tap">tap to continue ▸</div></div></div>
-      <div class="b-overlay"><div><h2></h2><div class="b-loot"></div><button class="cta"></button></div></div>`;
+      <div class="b-overlay"><div><h2></h2><div class="b-loot"></div><div class="b-endbtns"><button class="eq">🎒 EQUIP</button><button class="cta"></button></div></div></div>`;
     root.classList.add('on');
     const cv = root.querySelector('#battle-canvas'), ctx = cv.getContext('2d');
     const heartsEl = root.querySelector('.b-hearts'), waveEl = root.querySelector('.b-wave');
@@ -39,6 +39,7 @@
     const dlg = root.querySelector('.b-dialog'), dlgLine = dlg.querySelector('.line');
     const overlay = root.querySelector('.b-overlay'), overH2 = overlay.querySelector('h2'), lootEl = overlay.querySelector('.b-loot'), cta = overlay.querySelector('.cta');
     const toast = root.querySelector('.b-toast');
+    const invBtn = root.querySelector('.b-inv'), eqBtn = overlay.querySelector('.eq');
 
     let W = 0, H = 0, DPR = Math.min(2, window.devicePixelRatio || 1);
     function resize() { W = root.clientWidth; H = root.clientHeight; cv.width = W * DPR; cv.height = H * DPR; ctx.setTransform(DPR, 0, 0, DPR, 0, 0); }
@@ -48,7 +49,14 @@
     const player = { x: W / 2, y: H * 0.7, r: 14, hp: stats.hp, max: stats.hp, face: { x: 0, y: -1 },
       atkCd: 0, dodgeCd: 0, iframe: 0, blocking: false, dashV: null };
     let enemies = [], projs = [], loot = [], fx = [];
-    let waveIdx = -1, bossActive = false, boss = null, state = 'dialog', dlgQueue = [], runLoot = [], last = 0, raf = 0, aliveFrames = 0;
+    let waveIdx = -1, bossActive = false, boss = null, state = 'dialog', dlgQueue = [], runLoot = [], last = 0, raf = 0, aliveFrames = 0, paused = false;
+
+    // open inventory mid-battle (pauses); resume recomputes stats from new gear
+    function openInv() { if (paused || (state !== 'fight' && state !== 'dialog') || !opts.onInventory) return; paused = true; opts.onInventory(resumeFromInv); }
+    function resumeFromInv(newEquipped) {
+      paused = false;
+      if (newEquipped) { const old = player.max; stats = statsFor(opts.classId, newEquipped); player.max = stats.hp; player.hp = clamp(player.hp + Math.max(0, player.max - old), 1, player.max); }
+    }
 
     // ---- input ----
     const keys = {}; const press = { atk: false, dodge: false }; const move = { x: 0, y: 0 };
@@ -64,6 +72,7 @@
     stick.addEventListener('pointerup', stickEnd); stick.addEventListener('pointercancel', stickEnd);
     root.querySelector('.b-btn.atk').addEventListener('pointerdown', e => { e.preventDefault(); press.atk = true; });
     root.querySelector('.b-btn.dodge').addEventListener('pointerdown', e => { e.preventDefault(); press.dodge = true; });
+    invBtn.addEventListener('pointerdown', e => { e.preventDefault(); openInv(); });
 
     // ---- dialog ----
     function showDialog(lines, then) { dlgQueue = lines.slice(); state = 'dialog'; nextLine(then); dlg.classList.add('on'); }
@@ -102,14 +111,15 @@
     function killEnemy(e) {
       enemies = enemies.filter(x => x !== e);
       fx.push({ t: 'pop', x: e.x, y: e.y, life: .3, color: e.color });
-      if (e === boss) { dropLoot(e.x, e.y, B.MYTHIC_BY_CLASS[opts.classId]); dropLoot(e.x + 22, e.y, pickTier('Legendary')); boss = null; bossActive = false; win(); return; }
-      // normal drops
+      if (e === boss) { runLoot.push(B.MYTHIC_BY_CLASS[opts.classId], pickTier('Legendary')); boss = null; bossActive = false; win(); return; }
+      // normal gear drop
       const r = Math.random(); let id = null;
       if (r < B.DROP_RATES.Legendary) id = pickTier('Legendary');
       else if (r < B.DROP_RATES.Legendary + B.DROP_RATES.Rare) id = pickTier('Rare');
       else if (r < B.DROP_RATES.Legendary + B.DROP_RATES.Rare + B.DROP_RATES.Common) id = pickTier('Common');
       if (id) dropLoot(e.x, e.y, id);
-      else if (Math.random() < 0.10) loot.push({ x: e.x, y: e.y, r: 8, potion: true });   // heal potion
+      // health orb — drops often and PERSISTS on the field between waves
+      if (Math.random() < 0.22) loot.push({ x: e.x + rand(-10, 10), y: e.y + rand(-10, 10), r: 8, potion: true, heal: 20 });
     }
     function pickTier(tier) { const a = B.NORMAL_LOOT[tier]; return a[Math.floor(Math.random() * a.length)]; }
     function dropLoot(x, y, id) { loot.push({ x, y, r: 9, id, tier: B.GEAR[id].tier }); }
@@ -195,7 +205,7 @@
     }
     function fireEnemyShot(e, dx, dy, spread) { const a = Math.atan2(dy, dx) + spread; projs.push({ x: e.x, y: e.y, vx: Math.cos(a) * (e.shotSpd || 180), vy: Math.sin(a) * (e.shotSpd || 180), life: 3, dmg: e.atk, team: 'enemy', color: '#ff88aa' }); }
     function grab(l) {
-      if (l.potion) { player.hp = clamp(player.hp + 24, 0, player.max); flash('+24 HP', '#5cff9d'); return; }
+      if (l.potion) { const h = l.heal || 24; player.hp = clamp(player.hp + h, 0, player.max); flash('+' + h + ' HP', '#5cff9d'); return; }
       runLoot.push(l.id); flash(B.GEAR[l.id].name + '!', B.TIER_COLOR[l.tier]); }
     function flash(text, color) { toast.textContent = text; toast.style.borderColor = color; toast.style.color = color; toast.classList.remove('on'); void toast.offsetWidth; toast.classList.add('on'); }
 
@@ -235,17 +245,22 @@
     }
 
     // ---- end states ----
-    function win() {
+    async function win() {
       state = 'won'; teardownInput();
+      const items = [...runLoot];
       overH2.textContent = 'VICTORY!'; overlay.classList.remove('lose');
-      const items = [...runLoot]; lootEl.innerHTML = items.length ? items.map(id => { const g = B.GEAR[id]; return `<div class="item" style="border-color:${B.TIER_COLOR[g.tier]};color:${B.TIER_COLOR[g.tier]}">${g.tier} · ${g.name}</div>`; }).join('') : '<div class="item">No gear this time — the trial still awaits.</div>';
+      lootEl.innerHTML = items.length ? items.map(id => { const g = B.GEAR[id]; return `<div class="item" style="border-color:${B.TIER_COLOR[g.tier]};color:${B.TIER_COLOR[g.tier]}">${g.tier} · ${g.name}</div>`; }).join('') : '<div class="item">No gear this time — the trial still awaits.</div>';
+      eqBtn.style.display = items.length ? '' : 'none'; eqBtn.textContent = '🎒 EQUIP';
       cta.textContent = `CLAIM ${plan.xp} XP ▸`; overlay.classList.add('on');
-      cta.onclick = () => { cleanup(); opts.onWin && opts.onWin({ xp: plan.xp, loot: items }); };
+      try { if (opts.onWin) await opts.onWin({ xp: plan.xp, loot: items }); } catch (e) { }   // persist loot so it's equippable now
+      eqBtn.onclick = () => { opts.onInventory && opts.onInventory(() => { }); };
+      cta.onclick = () => { cleanup(); (opts.onContinue || opts.onExit || (() => {}))({ xp: plan.xp, loot: items }); };
     }
     function lose() {
       if (state === 'lost') return; state = 'lost'; teardownInput();
       overH2.textContent = 'DEFEATED'; overlay.classList.add('lose');
       lootEl.innerHTML = '<div class="item">The Gatekeeper holds. Regroup and try again.</div>';
+      eqBtn.style.display = ''; eqBtn.textContent = 'FLEE'; eqBtn.onclick = () => { cleanup(); opts.onExit && opts.onExit(); };
       cta.textContent = 'RETRY ▸'; overlay.classList.add('on');
       cta.onclick = () => { cleanup(); start(opts); };
     }
@@ -253,7 +268,7 @@
     // ---- loop / lifecycle ----
     function frame(ts) {
       const dt = Math.min(0.05, (ts - last) / 1000 || 0); last = ts; aliveFrames++;
-      if (state === 'fight') update(dt);
+      if (state === 'fight' && !paused) update(dt);
       render();
       raf = requestAnimationFrame(frame);
     }
