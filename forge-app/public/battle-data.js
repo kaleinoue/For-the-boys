@@ -71,7 +71,29 @@ const GENERIC_DIALOG = [
   "The boss holds a Mythic relic meant for you. Finish this.",
 ];
 
+// Per-quest teaching dialog, shown between waves. Original summaries of each
+// quest's lesson, in a battle-mentor voice.
+const QUEST_DIALOG = {
+  q0:  ["Every hero needs a loadout. Yours is AI — the tools that make you dangerous.","Claude, a free Gemini key, VS Code, Git. Gear up.","Pick your class and own it. The crew wins together."],
+  q1:  ["A vague command earns a vague blade. Be specific.","R.A.C.E. — Role, Action, Context, Expectations. Carve your prompt.","Steer the machine, or it wanders. You hold the reins."],
+  q2:  ["Give the AI a persona and rules, and it fights for you.","Show it examples. Demand a format. Precision cuts deeper.","A sharp prompt is a sharp weapon."],
+  q3:  ["A chatbot only talks. An AGENT acts — think, act, observe, repeat.","Give a mind a loop and tools, and it works while you rest.","Today you stop chatting and start commanding."],
+  q4:  ["Tools are the hands. The model asks; your code strikes.","One good tool turns a single wish into a hundred actions.","Give your agent a weapon it can actually swing."],
+  q5:  ["MCP is the universal mount — plug any tool into any AI.","Standardize the connection; wield everything the same way.","Stop rebuilding hilts. Forge one that fits all."],
+  q6:  ["Scout before you strike. One source is a rumor.","Triangulate the truth from three places, then lock your plan.","Know the battlefield before you name your game."],
+  q7:  ["Build fast with AI — but never wield code you can't explain.","Small strokes. Read each one. Ship ugly. Keep control.","A slice you can play beats a dream you can't."],
+  q8:  ["Errors aren't defeat — they're the map to the fix.","Feed the AI the full error and the context, then branch, commit, push.","Every bug you fell makes the next one easier."],
+  q9:  ["One agent is a soldier. Many, coordinated, are an army.","Split the work — designer, coder, critic — each its own blade.","Command the swarm; don't drown in it."],
+  q10: ["Raw power needs aim. Break the goal into clear strikes.","The orchestrator turns chaos into a shipped plan.","Point the engine at ONE target, then let it run."],
+  q11: ["Guard your secrets like your life. Keys never leave the vault.","Never trust output blindly — verify before you wield it.","A leaked key is a blade handed to your enemy."],
+  q12: ["To defend, you must first attack — your OWN systems.","Instructions hidden in data can hijack a mind. Hunt them.","Break it in the training yard so it holds in the field."],
+  q13: ["Don't trust the oracle — audit it. Hallucinations wear confidence.","Judge the output against a rubric. Truth over vibes.","A good judge is worth ten blind believers."],
+  q14: ["Watch a stranger struggle in silence. Their confusion is gold.","Juice — sound, feel, feedback — turns 'fine' into 'again!'","Polish is the difference between played and ignored."],
+  q15: ["A blade left in the forge helps no one. Ship it to the world.","A live link is proof. Guard it, then shout about it.","Today you cross the line most people never do."],
+  q16: ["This is the final gate. Show what you built and what you learned.","You entered a noob. You leave a Forgemaster.","One last stand — then the world sees the crew."],
+};
+
 if (typeof window !== 'undefined') {
-  window.BATTLE = { CLASSES, ENEMIES, BOSS, GEAR, TIER_COLOR, DROP_RATES, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, GENERIC_DIALOG };
+  window.BATTLE = { CLASSES, ENEMIES, BOSS, GEAR, TIER_COLOR, DROP_RATES, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, GENERIC_DIALOG, QUEST_DIALOG };
 }
-if (typeof module !== 'undefined') module.exports = { CLASSES, ENEMIES, BOSS, GEAR, TIER_COLOR, DROP_RATES, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, GENERIC_DIALOG };
+if (typeof module !== 'undefined') module.exports = { CLASSES, ENEMIES, BOSS, GEAR, TIER_COLOR, DROP_RATES, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, GENERIC_DIALOG, QUEST_DIALOG };

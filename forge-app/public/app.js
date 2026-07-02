@@ -141,6 +141,28 @@ function launchBattle(){
     onExit: ()=>{ startMusic(); } });
 }
 
+// Quest flow: fight the quest's battle first, THEN the AI trial opens.
+function attemptQuest(qid){
+  if(isGod()){ openQuest(qid); return; }               // GM skips straight to the trial
+  if(profileOf(ME).battles[qid]){ openQuest(qid); return; }
+  launchQuestBattle(qid);
+}
+function launchQuestBattle(qid){
+  const idx = Math.max(0, flatQuests().findIndex(q=>q.id===qid));
+  const dialog = (window.BATTLE.QUEST_DIALOG && window.BATTLE.QUEST_DIALOG[qid]) || window.BATTLE.GENERIC_DIALOG;
+  const prof = profileOf(ME); stopMusic();
+  window.ForgeBattle.start({ classId: battleClass(), questIndex: idx, equipped: prof.equipped, dialog,
+    onWin: async (res)=>{
+      const d = await fetch('/api/battle/win',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({crewId:ME,questId:qid,xp:res.xp,loot:res.loot})}).then(r=>r.json());
+      if(d.state) STATE=d.state;
+      startMusic(); renderHUD(); renderMap();
+      toast(`⚔ Battle won! +${res.xp} XP · ${res.loot.length} loot`);
+      openQuest(qid);                                    // now the trial
+    },
+    onExit: ()=>{ startMusic(); renderMap(); } });
+}
+
 function wireChrome(){
   $('#btn-gm').onclick = ()=>{ initAudio(); loginGM(); };
   $('#btn-gear').onclick = ()=>{ sfx('click'); renderGear(); $('#gear-modal').classList.remove('hidden'); };
@@ -187,14 +209,15 @@ function renderMap(){
     const trail = document.createElement('div'); trail.className='trail';
     for(const q of act.quests){
       const st = questStatus(ME,q); const unlocked = isUnlocked(q.id);
+      const needsBattle = unlocked && !isGod() && st!=='done' && !profileOf(ME).battles[q.id];
       const cls = !unlocked?'locked':st==='done'?'done':st==='part'?'part':'available';
       const node = document.createElement('div'); node.className = `node ${cls}`;
       const face = !unlocked?'🔒':st==='done'?'✓':q.code.replace('Q','');
-      node.innerHTML = `<div class="connector"></div><div class="medallion">${face}</div><div class="n-title">${q.title}</div>`;
+      node.innerHTML = `<div class="connector"></div><div class="medallion">${face}</div><div class="n-title">${needsBattle?'⚔ ':''}${q.title}</div>`;
       node.querySelector('.medallion').onclick = ()=>{
         if(!unlocked){ sfx('locked'); node.animate([{transform:'translateX(-4px)'},{transform:'translateX(4px)'},{transform:'translateX(0)'}],{duration:200});
-          toast('🔒 Clear the trial before it'); return; }
-        sfx('click'); openQuest(q.id);
+          toast('🔒 Clear the quest before it'); return; }
+        sfx('click'); attemptQuest(q.id);
       };
       trail.appendChild(node);
     }
@@ -211,6 +234,13 @@ function openQuest(qid){
   const total = q.steps.reduce((s,x)=>s+x.xp,0);
   $('#q-code').textContent = q.code; $('#q-title').textContent = q.title; $('#q-xp').textContent = `${total} XP`;
   const box = $('#q-steps'); box.innerHTML='';
+  const cleared = !!profileOf(ME).battles[qid];
+  const note = document.createElement('div'); note.className='battle-note';
+  note.innerHTML = cleared
+    ? `⚔ Battle cleared — loot's in 🎒 GEAR. <button class="pixel-btn ghost bnote">Replay for loot</button>`
+    : `⚔ <button class="pixel-btn ghost bnote">Fight this quest's battle</button>`;
+  note.querySelector('.bnote').onclick = ()=>{ $('#quest-modal').classList.add('hidden'); launchQuestBattle(qid); };
+  box.appendChild(note);
   q.steps.forEach(step=>box.appendChild(renderStep(step)));
   $('#quest-modal').classList.remove('hidden');
 }

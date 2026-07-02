@@ -140,6 +140,9 @@ img{image-rendering:pixelated}
 .quest-banner h2{font-family:var(--font-pixel);font-size:.95rem;color:var(--gold);margin:0;flex:1;min-width:200px}
 .q-xp{font-family:var(--font-retro);font-size:1.2rem;color:var(--ember2)}
 
+.battle-note{background:#1a1206;border:2px solid var(--ember2);border-radius:10px;padding:.6rem .8rem;margin-bottom:1rem;
+  font-family:var(--font-retro);font-size:1.15rem;color:var(--ember2);display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.battle-note .bnote{margin-left:auto}
 .step{background:#120f1e;border:2px solid var(--line);border-radius:12px;padding:1rem;margin-bottom:1rem}
 .step .st-top{display:flex;justify-content:space-between;gap:.5rem;align-items:center}
 .st-title{font-family:var(--font-retro);font-size:1.3rem;color:var(--ink)}
