@@ -60,7 +60,7 @@ function enterGame(){
   $('#screen-title').classList.add('hidden');
   $('#screen-map').classList.remove('hidden');
   renderAdminBar(); renderHUD(); renderMap();
-  updateMusicBtn(); startMusic();
+  buildMusicPicker(); startMusic();
 }
 
 async function loginGM(){
@@ -90,7 +90,6 @@ function renderAdminBar(){
 
 function wireChrome(){
   $('#btn-gm').onclick = ()=>{ initAudio(); loginGM(); };
-  $('#btn-music').onclick = ()=>{ MUS_ON=!MUS_ON; localStorage.setItem('forge_music', MUS_ON?'1':'0'); updateMusicBtn(); MUS_ON?startMusic():stopMusic(); };
   $('#btn-switch').onclick = ()=>{ sfx('click'); stopMusic(); ME=null; localStorage.removeItem('forge_crew_id');
     $('#admin-bar').classList.add('hidden'); $('#screen-map').classList.add('hidden'); $('#screen-title').classList.remove('hidden'); buildHeroSelect(); };
   $('#btn-guild').onclick = ()=>{ sfx('click'); renderGuild(); $('#guild-modal').classList.remove('hidden'); };
@@ -151,6 +150,8 @@ function renderMap(){
 // ---- quest modal ------------------------------------------------------------
 function openQuest(qid){
   openQuestId = qid;
+  const act = QUESTS.acts.find(a=>a.quests.some(q=>q.id===qid));
+  if(act) musSetArea(act.id);                 // music follows the world
   const q = findQuest(qid);
   const total = q.steps.reduce((s,x)=>s+x.xp,0);
   $('#q-code').textContent = q.code; $('#q-title').textContent = q.title; $('#q-xp').textContent = `${total} XP`;
@@ -280,37 +281,71 @@ function sfx(kind){ if(MUTED)return; initAudio();
   else if(kind==='locked'){ tone(140,.12,'square',.05); }
 }
 
-// ---- background chiptune (synthesized — free, no files) --------------------
-let MUS_ON = localStorage.getItem('forge_music') !== '0';   // default on
+// ============ background chiptune (synthesized — free, no files) ============
+// All ORIGINAL era-style tracks + genuine PUBLIC-DOMAIN melodies (Korobeiniki =
+// traditional folk; Ode to Joy = Beethoven). No copyrighted game music.
+function noteHz(n){ if(!n||n==='r')return 0; const m=/^([A-G]#?)(-?\d)$/.exec(n);
+  const map={C:0,'C#':1,D:2,'D#':3,E:4,F:5,'F#':6,G:7,'G#':8,A:9,'A#':10,B:11};
+  return 440*Math.pow(2,((map[m[1]]+(+m[2]+1)*12)-69)/12); }
+function expand(line){ const a=[]; for(const [n,d] of line){ a.push({f:noteHz(n),dur:d}); for(let i=1;i<d;i++)a.push(null);} return a; }
+const C_=(b,n)=>({b:noteHz(b),n:n.map(noteHz)});
+const CH={ Am:C_('A2',['A3','C4','E4']), F:C_('F2',['F3','A3','C4']), C:C_('C3',['C4','E4','G4']),
+  G:C_('G2',['G3','B3','D4']), Em:C_('E2',['E3','G3','B3']), Dm:C_('D3',['D4','F4','A4']),
+  Gm:C_('G2',['G3','A#3','D4']), A:C_('A2',['A3','C#4','E4']), E:C_('E2',['E3','G#3','B3']), Bm:C_('B2',['B3','D4','F#4']) };
+
+// type 'arp' = looping chord progression (safe & consonant). type 'mel' = a public-domain melody line.
+const TRACKS={
+  overworld:{label:'⚔️ Overworld',  bpm:140, wave:'square',   type:'arp', chords:[CH.Am,CH.F,CH.C,CH.G]},
+  puzzle:   {label:'🧩 Puzzle',     bpm:128, wave:'square',   type:'arp', chords:[CH.C,CH.Am,CH.F,CH.G]},
+  dungeon:  {label:'🕯️ Dungeon',    bpm:96,  wave:'triangle', type:'arp', chords:[CH.Em,CH.C,CH.Am,CH.Bm]},
+  castle:   {label:'🦇 Castle',     bpm:104, wave:'square',   type:'arp', chords:[CH.Dm,CH.Gm,CH.A,CH.Dm]},
+  boss:     {label:'⚡ Boss',       bpm:158, wave:'square',   type:'arp', chords:[CH.Am,CH.F,CH.E,CH.E]},
+  victory:  {label:'🎉 Victory',    bpm:124, wave:'square',   type:'arp', chords:[CH.C,CH.G,CH.Am,CH.F]},
+  ode:{label:'🎼 Ode to Joy (Beethoven)', bpm:118, wave:'square', type:'mel',
+    lead:expand([['E4',4],['E4',4],['F4',4],['G4',4],['G4',4],['F4',4],['E4',4],['D4',4],['C4',4],['C4',4],['D4',4],['E4',4],['E4',6],['D4',2],['D4',8]]),
+    bass:expand([['C2',16],['G2',16],['C2',16],['G2',8],['C2',8]])},
+  koro:{label:'🧱 Korobeiniki (trad.)', bpm:150, wave:'square', type:'mel',
+    lead:expand([['E5',4],['B4',2],['C5',2],['D5',4],['C5',2],['B4',2],['A4',4],['A4',2],['C5',2],['E5',4],['D5',2],['C5',2],['B4',6],['C5',2],['D5',4],['E5',4],['C5',4],['A4',4],['A4',8]]),
+    bass:expand([['E2',16],['A2',16],['E2',16],['B2',8],['E2',8]])},
+};
+const ACT_TRACK={ act0:'overworld', act1:'puzzle', act2:'dungeon', act3:'overworld', act4:'boss', act5:'castle', act6:'victory' };
+
+let MUS_MODE = localStorage.getItem('forge_music') || 'auto';   // 'off' | 'auto' | trackKey
+let curActId='act0', curTrack=null, musStepDur=0.15;
 let musGain=null, musTimer=null, musNext=0, musStep=0;
-const MUS_BPM=100, MUS_STEP=60/MUS_BPM/2;                    // eighth notes
-// Gentle looping progression (Am–F–C–G), one bar each — classic adventurey NES feel.
-const CHORDS=[
-  {bass:110.00, notes:[220.00,261.63,329.63]}, // Am
-  {bass: 87.31, notes:[174.61,220.00,261.63]}, // F
-  {bass:130.81, notes:[261.63,329.63,392.00]}, // C
-  {bass: 98.00, notes:[196.00,246.94,293.66]}, // G
-];
+
 function musInit(){ initAudio(); if(AC && !musGain){ musGain=AC.createGain(); musGain.gain.value=0.05; musGain.connect(AC.destination); } }
-function musVoice(freq,dur,type,vol,at){ if(!AC||!musGain)return;
+function musVoice(freq,dur,type,vol,at){ if(!AC||!musGain||!freq)return;
   const o=AC.createOscillator(), g=AC.createGain(); o.type=type; o.frequency.value=freq; o.connect(g); g.connect(musGain);
-  g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(vol,at+0.01); g.gain.exponentialRampToValueAtTime(0.0001,at+dur);
-  o.start(at); o.stop(at+dur); }
+  g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(vol,at+0.01); g.gain.exponentialRampToValueAtTime(0.0001,at+Math.max(0.05,dur));
+  o.start(at); o.stop(at+Math.max(0.05,dur)); }
 function musPlayStep(s,at){
-  const ch=CHORDS[Math.floor(s/8)%CHORDS.length], e=s%8;
-  if(e%2===0) musVoice(ch.bass, MUS_STEP*1.8, 'triangle', 0.5, at);           // bass on quarters
-  musVoice(ch.notes[e%ch.notes.length], MUS_STEP*0.9, 'square', 0.28, at);    // arpeggio
-  if(e===0) musVoice(ch.notes[2]*2, MUS_STEP*0.85, 'square', 0.16, at);       // little lead accent
-}
-function musSchedule(){ if(!AC)return; while(musNext < AC.currentTime + 0.15){ musPlayStep(musStep, musNext); musNext+=MUS_STEP; musStep++; } }
-function startMusic(){
-  if(!MUS_ON) return; musInit(); if(!AC) return;
-  if(AC.state==='suspended'){                                                 // needs a user gesture first
-    const go=()=>{ AC.resume(); document.removeEventListener('pointerdown',go); document.removeEventListener('keydown',go); reallyStartMusic(); };
-    document.addEventListener('pointerdown',go); document.addEventListener('keydown',go); return;
+  if(!curTrack) return; const sd=musStepDur, w=curTrack.wave;
+  if(curTrack.type==='arp'){
+    const ch=curTrack.chords[Math.floor(s/16)%curTrack.chords.length], e=s%16;
+    if(e%4===0) musVoice(ch.b, sd*3.6, 'triangle', 0.5, at);                   // bass on beats
+    if(e%2===0) musVoice(ch.n[(e/2)%ch.n.length], sd*1.8, w, 0.26, at);        // arpeggio (eighths)
+  } else {                                                                     // melody
+    const L=curTrack.lead[s%curTrack.lead.length]; if(L) musVoice(L.f, L.dur*sd*0.95, w, 0.34, at);
+    const B=curTrack.bass[s%curTrack.bass.length]; if(B) musVoice(B.f, B.dur*sd*0.9, 'triangle', 0.4, at);
   }
+}
+function musSchedule(){ if(!AC)return; while(musNext < AC.currentTime + 0.15){ musPlayStep(musStep, musNext); musNext+=musStepDur; musStep++; } }
+function setTrack(key){ const t=TRACKS[key]; if(!t)return; curTrack=t; musStepDur=60/t.bpm/4; musStep=0; if(AC) musNext=AC.currentTime+0.08; }
+function pickKey(){ return MUS_MODE==='auto' ? (ACT_TRACK[curActId]||'overworld') : MUS_MODE; }
+function startMusic(){
+  if(MUS_MODE==='off'){ stopMusic(); return; }
+  musInit(); if(!AC) return; setTrack(pickKey());
+  if(AC.state==='suspended'){ const go=()=>{AC.resume();document.removeEventListener('pointerdown',go);document.removeEventListener('keydown',go);reallyStartMusic();};
+    document.addEventListener('pointerdown',go); document.addEventListener('keydown',go); return; }
   reallyStartMusic();
 }
-function reallyStartMusic(){ if(musTimer||!AC) return; musNext=AC.currentTime+0.1; musStep=0; musTimer=setInterval(musSchedule,30); }
+function reallyStartMusic(){ if(!AC) return; if(!musTimer){ musNext=AC.currentTime+0.1; musTimer=setInterval(musSchedule,30); } }
 function stopMusic(){ if(musTimer){ clearInterval(musTimer); musTimer=null; } }
-function updateMusicBtn(){ const b=$('#btn-music'); if(b){ b.textContent='🎵'; b.style.opacity=MUS_ON?'1':'.4'; b.title=MUS_ON?'music: on':'music: off'; } }
+function musSetArea(actId){ if(actId && actId!==curActId){ curActId=actId; if(MUS_MODE==='auto'&&musTimer) setTrack(pickKey()); } }
+function buildMusicPicker(){
+  const sel=$('#music-pick'); if(!sel) return;
+  const opts=[['off','🔇 Music Off'],['auto','🎵 Auto (by area)'],...Object.entries(TRACKS).map(([k,t])=>[k,t.label])];
+  sel.innerHTML=opts.map(([v,l])=>`<option value="${v}" ${v===MUS_MODE?'selected':''}>${l}</option>`).join('');
+  sel.onchange=()=>{ MUS_MODE=sel.value; localStorage.setItem('forge_music',MUS_MODE); if(MUS_MODE==='off') stopMusic(); else startMusic(); };
+}

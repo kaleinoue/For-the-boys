@@ -79,7 +79,10 @@ img{image-rendering:pixelated}
 .hud-info{min-width:min(48vw,260px)}
 .hud-name{font-family:var(--font-pixel);font-size:.72rem;color:var(--gold)}
 .hud-level{font-family:var(--font-retro);font-size:1.15rem;color:var(--muted);margin:.1rem 0 .25rem}
-.hud-actions{display:flex;gap:.5rem;flex-wrap:wrap}
+.hud-actions{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+.music-pick{font-family:var(--font-retro);font-size:1.05rem;background:var(--panel2);color:var(--ink);
+  border:2px solid var(--line);border-radius:8px;padding:.45rem .5rem;max-width:180px}
+.music-pick:hover{border-color:var(--ember)}
 
 /* xp bar */
 .xpbar{position:relative;height:18px;background:#0c0a16;border:2px solid var(--line);border-radius:10px;overflow:hidden}
