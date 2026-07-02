@@ -72,7 +72,9 @@
     stick.addEventListener('pointerup', stickEnd); stick.addEventListener('pointercancel', stickEnd);
     root.querySelector('.b-btn.atk').addEventListener('pointerdown', e => { e.preventDefault(); press.atk = true; });
     root.querySelector('.b-btn.dodge').addEventListener('pointerdown', e => { e.preventDefault(); press.dodge = true; });
-    invBtn.addEventListener('pointerdown', e => { e.preventDefault(); openInv(); });
+    // use 'click' (not pointerdown): on touch, opening on pointerdown lets the
+    // tap's click land on the modal backdrop and instantly close it.
+    invBtn.addEventListener('click', () => openInv());
 
     // ---- dialog ----
     function showDialog(lines, then) { dlgQueue = lines.slice(); state = 'dialog'; nextLine(then); dlg.classList.add('on'); }
