@@ -43,6 +43,9 @@ const TIER_COLOR = { Common:'#c9d1d9', Rare:'#5eb1ff', Legendary:'#ffb020', Myth
 // Drop chances on a normal kill (rest = nothing). Boss handled separately.
 const DROP_RATES = { Common:0.32, Rare:0.10, Legendary:0.02 };
 
+// Gold you get for scrapping a piece of gear (Mythics can't be scrapped).
+const SCRAP_VALUE = { Common:5, Rare:20, Legendary:60 };
+
 const NORMAL_LOOT = { Common:['wood_sword','leather','charm'], Rare:['iron_sword','chainmail','swift_boots'], Legendary:['flame_blade','aegis','focus_amulet'] };
 const MYTHIC_BY_CLASS = { zeppelin:'myth_zeppelin', leo:'myth_leo', jonah:'myth_jonah', jyana:'myth_jyana' };
 
@@ -94,6 +97,6 @@ const QUEST_DIALOG = {
 };
 
 if (typeof window !== 'undefined') {
-  window.BATTLE = { CLASSES, ENEMIES, BOSS, GEAR, TIER_COLOR, DROP_RATES, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, GENERIC_DIALOG, QUEST_DIALOG };
+  window.BATTLE = { CLASSES, ENEMIES, BOSS, GEAR, TIER_COLOR, DROP_RATES, SCRAP_VALUE, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, GENERIC_DIALOG, QUEST_DIALOG };
 }
-if (typeof module !== 'undefined') module.exports = { CLASSES, ENEMIES, BOSS, GEAR, TIER_COLOR, DROP_RATES, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, GENERIC_DIALOG, QUEST_DIALOG };
+if (typeof module !== 'undefined') module.exports = { CLASSES, ENEMIES, BOSS, GEAR, TIER_COLOR, DROP_RATES, SCRAP_VALUE, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, GENERIC_DIALOG, QUEST_DIALOG };

@@ -113,7 +113,7 @@
     function killEnemy(e) {
       enemies = enemies.filter(x => x !== e);
       fx.push({ t: 'pop', x: e.x, y: e.y, life: .3, color: e.color });
-      if (e === boss) { runLoot.push(B.MYTHIC_BY_CLASS[opts.classId], pickTier('Legendary')); boss = null; bossActive = false; win(); return; }
+      if (e === boss) { const myth = B.MYTHIC_BY_CLASS[opts.classId]; runLoot.push(opts.hasMythic ? pickTier('Legendary') : myth, pickTier('Legendary')); boss = null; bossActive = false; win(); return; }
       // normal gear drop
       const r = Math.random(); let id = null;
       if (r < B.DROP_RATES.Legendary) id = pickTier('Legendary');

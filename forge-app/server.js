@@ -56,7 +56,7 @@ function rankFor(xp) { let r = RANKS[0]; for (const rank of RANKS) if (xp >= ran
 function emptyState() { const s = { crew: {} }; for (const c of CREW) s.crew[c.id] = { xp: 0, steps: {} }; return s; }
 // sum step xp, skipping the special __profile key (character/inventory data)
 function recomputeXp(m) { m.xp = Object.entries(m.steps).reduce((sum, [k, v]) => sum + (k.startsWith('__') ? 0 : (v.xp || 0)), 0); return m.xp; }
-function getProfile(m) { const p = (m.steps.__profile ||= { inventory: [], equipped: {}, battles: {} }); p.inventory ||= []; p.equipped ||= {}; p.battles ||= {}; return p; }
+function getProfile(m) { const p = (m.steps.__profile ||= { inventory: [], equipped: {}, battles: {}, gold: 0 }); p.inventory ||= []; p.equipped ||= {}; p.battles ||= {}; p.gold ??= 0; return p; }
 
 // campaign structure WITHOUT rubrics (safe to send to the browser)
 function publicQuests() {
@@ -249,7 +249,10 @@ const server = http.createServer(async (req, res) => {
       if (!m) return sendJson(res, 400, { error: 'Unknown crew member.' });
       const prof = getProfile(m);
       const items = (Array.isArray(loot) ? loot : []).filter(id => GEARDATA.GEAR[id]).slice(0, 8);
-      prof.inventory.push(...items);
+      for (const id of items) {                                  // no duplicate Mythics
+        if (GEARDATA.GEAR[id].tier === 'Mythic' && prof.inventory.includes(id)) continue;
+        prof.inventory.push(id);
+      }
       if (questId != null && !prof.battles[questId]) {           // XP once per battle; loot every time
         prof.battles[questId] = true;
         m.steps['battle:' + questId] = { xp: Math.max(0, Math.min(2000, +xp || 0)), at: Date.now(), cleared: true };
@@ -272,6 +275,23 @@ const server = http.createServer(async (req, res) => {
       } else { delete prof.equipped[slot]; }
       await store.putMember(crewId, m);
       return sendJson(res, 200, { ok: true, state: decorate(state) });
+    }
+    if (req.method === 'POST' && url === '/api/profile/scrap') {
+      const { crewId, itemId } = await readBody(req);
+      const state = await store.getAll(); const m = state.crew[crewId];
+      if (!m) return sendJson(res, 400, { error: 'Unknown crew member.' });
+      const g = GEARDATA.GEAR[itemId];
+      if (!g) return sendJson(res, 400, { error: 'Unknown item.' });
+      if (g.tier === 'Mythic') return sendJson(res, 403, { error: 'Mythics cannot be scrapped.' });
+      const prof = getProfile(m);
+      const idx = prof.inventory.indexOf(itemId);
+      if (idx < 0) return sendJson(res, 400, { error: 'Not in inventory.' });
+      prof.inventory.splice(idx, 1);
+      if (!prof.inventory.includes(itemId)) for (const s in prof.equipped) if (prof.equipped[s] === itemId) delete prof.equipped[s];
+      const value = GEARDATA.SCRAP_VALUE[g.tier] || 0;
+      prof.gold = (prof.gold || 0) + value;
+      await store.putMember(crewId, m);
+      return sendJson(res, 200, { ok: true, value, gold: prof.gold, state: decorate(state) });
     }
     if (req.method === 'GET' && url === '/api/admin/health') {
       const code = new URL(req.url, 'http://x').searchParams.get('code');

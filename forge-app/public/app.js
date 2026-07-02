@@ -90,7 +90,7 @@ function renderAdminBar(){
 
 // ---- character / inventory (gear affects battle stats) ----
 function battleClass(){ return (ME && ME!=='gm') ? ME : 'zeppelin'; }
-function profileOf(id){ const p = STATE.crew[id]?.steps?.__profile; return { inventory:(p&&p.inventory)||[], equipped:(p&&p.equipped)||{}, battles:(p&&p.battles)||{} }; }
+function profileOf(id){ const p = STATE.crew[id]?.steps?.__profile; return { inventory:(p&&p.inventory)||[], equipped:(p&&p.equipped)||{}, battles:(p&&p.battles)||{}, gold:(p&&p.gold)||0 }; }
 function computeStats(id){
   const G=window.BATTLE.GEAR, base={...window.BATTLE.CLASSES[battleClass()].base};
   const eq=profileOf(id).equipped;
@@ -109,17 +109,26 @@ function renderGear(){
   Object.values(prof.equipped).forEach(id=>{ if(counts[id]) counts[id]--; });
   const order=['Mythic','Legendary','Rare','Common'];
   const invHtml = Object.entries(counts).filter(([id,n])=>n>0&&G[id]).sort((a,b)=>order.indexOf(G[a[0]].tier)-order.indexOf(G[b[0]].tier))
-    .map(([id,n])=>{ const g=G[id]; const locked=g.klass&&g.klass!==ME; const mods=Object.entries(g.mods).map(([k,v])=>`${k}+${v}`).join(' ');
-      return `<button class="item" ${locked?'disabled':`data-eq="${id}" data-slot="${g.slot}"`} style="border-color:${TC[g.tier]};color:${TC[g.tier]}">${g.name}${n>1?` ×${n}`:''} <small>[${g.slot} · ${mods}]</small>${locked?' 🔒':''}</button>`; }).join('') || '<div class="empty">No gear yet — win battles to loot some.</div>';
+    .map(([id,n])=>{ const g=G[id]; const locked=g.klass&&g.klass!==ME; const mods=Object.entries(g.mods).map(([k,v])=>`${k}+${v}`).join(' '); const sv=window.BATTLE.SCRAP_VALUE[g.tier];
+      return `<div class="invrow"><button class="item" ${locked?'disabled':`data-eq="${id}" data-slot="${g.slot}"`} style="border-color:${TC[g.tier]};color:${TC[g.tier]}">${g.name}${n>1?` ×${n}`:''} <small>[${g.slot} · ${mods}]</small>${locked?' 🔒':''}</button>${sv?`<button class="scrap" data-scrap="${id}" title="scrap for gold">♻ ${sv}g</button>`:''}</div>`; }).join('') || '<div class="empty">No gear yet — win battles to loot some.</div>';
   $('#gear-body').innerHTML = `
     <div class="statgrid">
       <div>❤ Health <b>${st.hp}</b></div><div>⚔ Attack <b>${st.atk}</b></div>
       <div>🛡 Armor <b>${st.armor}</b></div><div>👟 Speed <b>${st.speed}</b></div>
     </div>
+    <div class="goldline">💰 <b>${prof.gold||0}</b> gold</div>
     <h3 class="sub">Equipped</h3>${slotHtml}
-    <h3 class="sub">Inventory</h3><div class="invlist">${invHtml}</div>`;
+    <h3 class="sub">Inventory <small>(tap gear to equip · ♻ to scrap for gold)</small></h3><div class="invlist">${invHtml}</div>`;
   $('#gear-body').querySelectorAll('[data-eq]').forEach(b=>b.onclick=()=>equip(b.dataset.slot,b.dataset.eq));
   $('#gear-body').querySelectorAll('[data-uneq]').forEach(b=>b.onclick=()=>equip(b.dataset.uneq,null));
+  $('#gear-body').querySelectorAll('[data-scrap]').forEach(b=>b.onclick=()=>scrap(b.dataset.scrap));
+}
+async function scrap(id){
+  const g=window.BATTLE.GEAR[id];
+  if(!confirm(`Scrap ${g.name} for ${window.BATTLE.SCRAP_VALUE[g.tier]} gold?`)) return;
+  const d=await fetch('/api/profile/scrap',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({crewId:ME,itemId:id})}).then(r=>r.json());
+  if(d.error){ alert(d.error); return; }
+  STATE=d.state; sfx('click'); toast(`♻ +${d.value} gold (${d.gold} total)`); renderGear(); renderHUD();
 }
 async function equip(slot,itemId){
   const d=await fetch('/api/profile/equip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({crewId:ME,slot,itemId})}).then(r=>r.json());
@@ -130,7 +139,8 @@ function launchBattle(){
   const prof=profileOf(ME);
   const qi=Math.min(16, Object.keys(prof.battles).length);   // difficulty grows as you clear
   stopMusic();
-  window.ForgeBattle.start({ classId: battleClass(), questIndex: qi, equipped: prof.equipped,
+  const hasMythic = prof.inventory.includes(window.BATTLE.MYTHIC_BY_CLASS[battleClass()]);
+  window.ForgeBattle.start({ classId: battleClass(), questIndex: qi, equipped: prof.equipped, hasMythic,
     onWin: async (res)=>{
       const d=await fetch('/api/battle/win',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({crewId:ME,questId:'train'+qi,xp:res.xp,loot:res.loot})}).then(r=>r.json());
@@ -151,7 +161,8 @@ function launchQuestBattle(qid){
   const idx = Math.max(0, flatQuests().findIndex(q=>q.id===qid));
   const dialog = (window.BATTLE.QUEST_DIALOG && window.BATTLE.QUEST_DIALOG[qid]) || window.BATTLE.GENERIC_DIALOG;
   const prof = profileOf(ME); stopMusic();
-  window.ForgeBattle.start({ classId: battleClass(), questIndex: idx, equipped: prof.equipped, dialog,
+  const hasMythic = prof.inventory.includes(window.BATTLE.MYTHIC_BY_CLASS[battleClass()]);
+  window.ForgeBattle.start({ classId: battleClass(), questIndex: idx, equipped: prof.equipped, dialog, hasMythic,
     onWin: async (res)=>{                                // persist loot so it's equippable on the victory screen
       const d = await fetch('/api/battle/win',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({crewId:ME,questId:qid,xp:res.xp,loot:res.loot})}).then(r=>r.json());
