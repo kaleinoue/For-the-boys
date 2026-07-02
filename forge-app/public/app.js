@@ -307,8 +307,15 @@ const TRACKS={
   koro:{label:'🧱 Korobeiniki (trad.)', bpm:150, wave:'square', type:'mel',
     lead:expand([['E5',4],['B4',2],['C5',2],['D5',4],['C5',2],['B4',2],['A4',4],['A4',2],['C5',2],['E5',4],['D5',2],['C5',2],['B4',6],['C5',2],['D5',4],['E5',4],['C5',4],['A4',4],['A4',8]]),
     bass:expand([['E2',16],['A2',16],['E2',16],['B2',8],['E2',8]])},
+  mountainking:{label:'👑 Mountain King (Grieg)', bpm:150, wave:'square', type:'mel',
+    lead:expand([['B4',2],['C#5',2],['D5',2],['E5',2],['F#5',2],['D5',2],['F#5',2],['r',2],
+      ['F5',2],['D5',2],['F5',2],['r',2],['F5',2],['D5',2],['F5',2],['r',2],
+      ['B4',2],['C#5',2],['D5',2],['E5',2],['F#5',2],['D5',2],['F#5',2],['r',2],
+      ['A5',2],['F#5',2],['A5',2],['r',2],['A5',2],['F#5',2],['A5',2],['r',2]]),
+    bass:expand([['B2',16],['B2',16],['B2',16],['F#2',8],['B2',8]])},
+  cavalry:{label:'🐎 Cavalry (fast)', bpm:170, wave:'square', type:'arp', chords:[CH.Am,CH.E,CH.Dm,CH.E]},
 };
-const ACT_TRACK={ act0:'overworld', act1:'puzzle', act2:'dungeon', act3:'overworld', act4:'boss', act5:'castle', act6:'victory' };
+const ACT_TRACK={ act0:'overworld', act1:'puzzle', act2:'dungeon', act3:'overworld', act4:'boss', act5:'mountainking', act6:'victory' };
 
 let MUS_MODE = localStorage.getItem('forge_music') || 'auto';   // 'off' | 'auto' | trackKey
 let curActId='act0', curTrack=null, musStepDur=0.15;
