@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="battle.css" />
 </head>
 <body>
   <div id="embers" class="embers" aria-hidden="true"></div>
@@ -37,6 +38,8 @@
         </div>
       </div>
       <div class="hud-actions">
+        <button id="btn-battle" class="pixel-btn">⚔️ BATTLE</button>
+        <button id="btn-gear" class="pixel-btn">🎒 GEAR</button>
         <button id="btn-guild" class="pixel-btn">🏆 GUILD</button>
         <select id="music-pick" class="music-pick" title="music"></select>
         <button id="btn-sound" class="pixel-btn" title="sound effects">🔊</button>
@@ -53,6 +56,15 @@
       <button class="modal-close" data-close>✕</button>
       <div class="quest-banner"><span id="q-code" class="q-code"></span><h2 id="q-title"></h2><span id="q-xp" class="q-xp"></span></div>
       <div id="q-steps" class="q-steps"></div>
+    </div>
+  </div>
+
+  <!-- ============ CHARACTER / INVENTORY ============ -->
+  <div id="gear-modal" class="modal hidden">
+    <div class="modal-card gear-card">
+      <button class="modal-close" data-close>✕</button>
+      <h2 class="guild-title">🎒 <span id="gear-name"></span></h2>
+      <div id="gear-body"></div>
     </div>
   </div>
 
@@ -75,6 +87,8 @@
     </div>
   </div>
 
+  <script src="battle-data.js"></script>
+  <script src="battle.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

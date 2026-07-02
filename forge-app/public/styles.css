@@ -172,6 +172,21 @@ img{image-rendering:pixelated}
 .g-meta{font-family:var(--font-retro);font-size:1rem;color:var(--muted)}
 .g-xp{margin-left:auto;font-family:var(--font-pixel);font-size:.7rem;color:var(--ember2)}
 
+/* ================= CHARACTER / INVENTORY ================= */
+.gear-card .sub{font-family:var(--font-pixel);font-size:.62rem;color:var(--ember2);margin:1rem 0 .5rem}
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-family:var(--font-retro);font-size:1.3rem;
+  background:#120f1e;border:2px solid var(--line);border-radius:12px;padding:.8rem}
+.statgrid b{color:var(--gold)}
+.slot{display:flex;align-items:center;gap:.6rem;margin-bottom:.4rem}
+.slot-name{font-family:var(--font-retro);font-size:1.1rem;color:var(--muted);width:70px;text-transform:capitalize}
+.empty{font-family:var(--font-retro);font-size:1.1rem;color:var(--muted)}
+.invlist{display:flex;flex-direction:column;gap:.4rem}
+.item{text-align:left;font-family:var(--font-retro);font-size:1.25rem;background:#00000030;border:2px solid var(--line);
+  border-radius:9px;padding:.5rem .7rem;color:var(--ink)}
+.item small{color:var(--muted);font-size:.95rem}
+.item[disabled]{opacity:.5}
+.item.on{cursor:pointer}
+
 /* ================= LEVEL UP ================= */
 .levelup{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:#05040aee;animation:fade .2s}
 .levelup-inner{text-align:center;animation:lupop .5s cubic-bezier(.2,1.4,.4,1)}

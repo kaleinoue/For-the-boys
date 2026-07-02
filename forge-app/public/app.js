@@ -88,8 +88,63 @@ function renderAdminBar(){
   $('#gm-logout').onclick = logoutGM;
 }
 
+// ---- character / inventory (gear affects battle stats) ----
+function battleClass(){ return (ME && ME!=='gm') ? ME : 'zeppelin'; }
+function profileOf(id){ const p = STATE.crew[id]?.steps?.__profile; return { inventory:(p&&p.inventory)||[], equipped:(p&&p.equipped)||{}, battles:(p&&p.battles)||{} }; }
+function computeStats(id){
+  const G=window.BATTLE.GEAR, base={...window.BATTLE.CLASSES[battleClass()].base};
+  const eq=profileOf(id).equipped;
+  for(const slot in eq){ const it=G[eq[slot]]; if(it) for(const k in it.mods) base[k]=(base[k]||0)+it.mods[k]; }
+  return base;
+}
+function renderGear(){
+  const G=window.BATTLE.GEAR, TC=window.BATTLE.TIER_COLOR, c=crewById(ME);
+  $('#gear-name').textContent = `${c.name} — ${window.BATTLE.CLASSES[battleClass()].klass}`;
+  const prof=profileOf(ME), st=computeStats(ME);
+  const slots=['weapon','armor','trinket'];
+  const slotHtml = slots.map(s=>{ const id=prof.equipped[s]; const g=id&&G[id];
+    return `<div class="slot"><span class="slot-name">${s}</span>${g?`<button class="item on" data-uneq="${s}" style="border-color:${TC[g.tier]};color:${TC[g.tier]}">${g.name} ✕</button>`:`<span class="empty">— empty —</span>`}</div>`; }).join('');
+  // inventory grouped by id with counts, excluding equipped
+  const counts={}; prof.inventory.forEach(id=>counts[id]=(counts[id]||0)+1);
+  Object.values(prof.equipped).forEach(id=>{ if(counts[id]) counts[id]--; });
+  const order=['Mythic','Legendary','Rare','Common'];
+  const invHtml = Object.entries(counts).filter(([id,n])=>n>0&&G[id]).sort((a,b)=>order.indexOf(G[a[0]].tier)-order.indexOf(G[b[0]].tier))
+    .map(([id,n])=>{ const g=G[id]; const locked=g.klass&&g.klass!==ME; const mods=Object.entries(g.mods).map(([k,v])=>`${k}+${v}`).join(' ');
+      return `<button class="item" ${locked?'disabled':`data-eq="${id}" data-slot="${g.slot}"`} style="border-color:${TC[g.tier]};color:${TC[g.tier]}">${g.name}${n>1?` ×${n}`:''} <small>[${g.slot} · ${mods}]</small>${locked?' 🔒':''}</button>`; }).join('') || '<div class="empty">No gear yet — win battles to loot some.</div>';
+  $('#gear-body').innerHTML = `
+    <div class="statgrid">
+      <div>❤ Health <b>${st.hp}</b></div><div>⚔ Attack <b>${st.atk}</b></div>
+      <div>🛡 Armor <b>${st.armor}</b></div><div>👟 Speed <b>${st.speed}</b></div>
+    </div>
+    <h3 class="sub">Equipped</h3>${slotHtml}
+    <h3 class="sub">Inventory</h3><div class="invlist">${invHtml}</div>`;
+  $('#gear-body').querySelectorAll('[data-eq]').forEach(b=>b.onclick=()=>equip(b.dataset.slot,b.dataset.eq));
+  $('#gear-body').querySelectorAll('[data-uneq]').forEach(b=>b.onclick=()=>equip(b.dataset.uneq,null));
+}
+async function equip(slot,itemId){
+  const d=await fetch('/api/profile/equip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({crewId:ME,slot,itemId})}).then(r=>r.json());
+  if(d.error){ alert(d.error); return; }
+  STATE=d.state; sfx('click'); renderGear(); renderHUD();
+}
+function launchBattle(){
+  const prof=profileOf(ME);
+  const qi=Math.min(16, Object.keys(prof.battles).length);   // difficulty grows as you clear
+  stopMusic();
+  window.ForgeBattle.start({ classId: battleClass(), questIndex: qi, equipped: prof.equipped,
+    onWin: async (res)=>{
+      const d=await fetch('/api/battle/win',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({crewId:ME,questId:'train'+qi,xp:res.xp,loot:res.loot})}).then(r=>r.json());
+      if(d.state) STATE=d.state;
+      startMusic(); renderHUD(); renderMap();
+      toast(`+${res.xp} XP · ${res.loot.length} loot — check 🎒 GEAR`);
+    },
+    onExit: ()=>{ startMusic(); } });
+}
+
 function wireChrome(){
   $('#btn-gm').onclick = ()=>{ initAudio(); loginGM(); };
+  $('#btn-gear').onclick = ()=>{ sfx('click'); renderGear(); $('#gear-modal').classList.remove('hidden'); };
+  $('#btn-battle').onclick = ()=>{ initAudio(); sfx('click'); launchBattle(); };
   $('#btn-switch').onclick = ()=>{ sfx('click'); stopMusic(); ME=null; localStorage.removeItem('forge_crew_id');
     $('#admin-bar').classList.add('hidden'); $('#screen-map').classList.add('hidden'); $('#screen-title').classList.remove('hidden'); buildHeroSelect(); };
   $('#btn-guild').onclick = ()=>{ sfx('click'); renderGuild(); $('#guild-modal').classList.remove('hidden'); };

@@ -27,6 +27,7 @@ const path = require('path');
 })();
 
 const { CREW, RANKS, ACTS } = require('./data/quests');
+const GEARDATA = require('./public/battle-data.js');   // GEAR / CLASSES for validation
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -53,7 +54,9 @@ for (const act of ACTS)
 
 function rankFor(xp) { let r = RANKS[0]; for (const rank of RANKS) if (xp >= rank.min) r = rank; return r; }
 function emptyState() { const s = { crew: {} }; for (const c of CREW) s.crew[c.id] = { xp: 0, steps: {} }; return s; }
-function recomputeXp(m) { m.xp = Object.values(m.steps).reduce((sum, s) => sum + (s.xp || 0), 0); return m.xp; }
+// sum step xp, skipping the special __profile key (character/inventory data)
+function recomputeXp(m) { m.xp = Object.entries(m.steps).reduce((sum, [k, v]) => sum + (k.startsWith('__') ? 0 : (v.xp || 0)), 0); return m.xp; }
+function getProfile(m) { const p = (m.steps.__profile ||= { inventory: [], equipped: {}, battles: {} }); p.inventory ||= []; p.equipped ||= {}; p.battles ||= {}; return p; }
 
 // campaign structure WITHOUT rubrics (safe to send to the browser)
 function publicQuests() {
@@ -237,6 +240,37 @@ const server = http.createServer(async (req, res) => {
       member.steps[stepId] = { passed: true, score: 100, xp: step.xp, response: '[force-cleared by GM]', feedback: 'Force-cleared by the Game Master.', tip: '', at: Date.now() };
       recomputeXp(member);
       await store.putMember(crewId, member);
+      return sendJson(res, 200, { ok: true, state: decorate(state) });
+    }
+    // ---- battle / inventory ----
+    if (req.method === 'POST' && url === '/api/battle/win') {
+      const { crewId, questId, xp, loot } = await readBody(req);
+      const state = await store.getAll(); const m = state.crew[crewId];
+      if (!m) return sendJson(res, 400, { error: 'Unknown crew member.' });
+      const prof = getProfile(m);
+      const items = (Array.isArray(loot) ? loot : []).filter(id => GEARDATA.GEAR[id]).slice(0, 8);
+      prof.inventory.push(...items);
+      if (questId != null && !prof.battles[questId]) {           // XP once per battle; loot every time
+        prof.battles[questId] = true;
+        m.steps['battle:' + questId] = { xp: Math.max(0, Math.min(2000, +xp || 0)), at: Date.now(), cleared: true };
+      }
+      recomputeXp(m); await store.putMember(crewId, m);
+      return sendJson(res, 200, { ok: true, gained: items, state: decorate(state) });
+    }
+    if (req.method === 'POST' && url === '/api/profile/equip') {
+      const { crewId, slot, itemId } = await readBody(req);
+      const state = await store.getAll(); const m = state.crew[crewId];
+      if (!m) return sendJson(res, 400, { error: 'Unknown crew member.' });
+      const prof = getProfile(m);
+      if (itemId) {
+        const g = GEARDATA.GEAR[itemId];
+        if (!g) return sendJson(res, 400, { error: 'Unknown item.' });
+        if (g.slot !== slot) return sendJson(res, 400, { error: 'Wrong slot.' });
+        if (g.klass && g.klass !== crewId) return sendJson(res, 403, { error: 'That Mythic belongs to another class.' });
+        if (!prof.inventory.includes(itemId)) return sendJson(res, 400, { error: 'Not in inventory.' });
+        prof.equipped[slot] = itemId;
+      } else { delete prof.equipped[slot]; }
+      await store.putMember(crewId, m);
       return sendJson(res, 200, { ok: true, state: decorate(state) });
     }
     if (req.method === 'GET' && url === '/api/admin/health') {
