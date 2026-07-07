@@ -12,6 +12,10 @@
 .b-wave{margin-left:auto;font-size:18px;color:#ffd15c;text-shadow:0 1px 2px #000}
 .b-boss-wrap{position:absolute;top:40px;left:12px;right:12px;height:10px;background:#1a1020;border:2px solid #3a2540;border-radius:6px;display:none;z-index:2}
 .b-boss-wrap.on{display:block}
+.b-keys{position:absolute;top:58px;left:50%;transform:translateX(-50%);z-index:4;display:none;
+  font-family:'VT323',monospace;font-size:1.1rem;color:#fff;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);
+  padding:5px 14px;border-radius:20px;white-space:nowrap;pointer-events:none;max-width:96vw}
+.b-keys.on{display:block;animation:btoast 6.5s ease-out}
 .b-boss-fill{height:100%;width:100%;background:linear-gradient(90deg,#ff3355,#ff7a99);transition:width .15s}
 
 /* touch controls */

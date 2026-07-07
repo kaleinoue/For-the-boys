@@ -27,6 +27,7 @@
       <canvas id="battle-canvas"></canvas>
       <div class="b-hud"><span class="b-hearts"></span><button class="b-inv">🎒</button><span class="b-wave"></span></div>
       <div class="b-boss-wrap"><div class="b-boss-fill"></div></div>
+      <div class="b-keys"></div>
       <div class="b-toast"></div>
       <div class="b-stick"><div class="nub"></div></div>
       <div class="b-btns"><button class="b-btn atk">ATK</button><button class="b-btn dodge">${cls.dodge === 'block' ? 'BLOCK' : 'DODGE'}</button></div>
@@ -44,6 +45,13 @@
     let W = 0, H = 0, DPR = Math.min(2, window.devicePixelRatio || 1);
     function resize() { W = root.clientWidth; H = root.clientHeight; cv.width = W * DPR; cv.height = H * DPR; ctx.setTransform(DPR, 0, 0, DPR, 0, 0); }
     resize(); window.addEventListener('resize', resize);
+
+    // On desktop (no touch), show a controls hint at the start; it auto-hides.
+    if (!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) {
+      const kh = root.querySelector('.b-keys');
+      kh.textContent = `⌨  Move: WASD / Arrow keys   ·   Attack: J or Space   ·   ${cls.dodge === 'block' ? 'Block' : 'Dodge'}: K or Shift`;
+      kh.classList.add('on'); setTimeout(() => kh.classList.remove('on'), 6500);
+    }
 
     // ---- state ----
     const player = { x: W / 2, y: H * 0.7, r: 14, hp: stats.hp, max: stats.hp, face: { x: 0, y: -1 },
