@@ -8,6 +8,24 @@
   const rand = (a, b) => a + Math.random() * (b - a);
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
+  // ---- battle sound effects (WebAudio; respects the app's 🔊 mute) ----
+  let BAC = null;
+  function bAudio() { if (!BAC) { try { BAC = new (window.AudioContext || window.webkitAudioContext)(); } catch {} } if (BAC && BAC.state === 'suspended') BAC.resume(); return BAC; }
+  const muted = () => { try { return localStorage.getItem('forge_muted') === '1'; } catch { return false; } };
+  function bTone(freq, dur, type, vol, when, slideTo) { const ac = bAudio(); if (!ac || muted()) return; const t = ac.currentTime + (when || 0); const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.setValueAtTime(freq, t); if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur); o.connect(g); g.connect(ac.destination); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.start(t); o.stop(t + dur); }
+  function bNoise(dur, vol, when) { const ac = bAudio(); if (!ac || muted()) return; const t = ac.currentTime + (when || 0); const len = Math.max(1, Math.floor(ac.sampleRate * dur)); const buf = ac.createBuffer(1, len, ac.sampleRate); const dta = buf.getChannelData(0); for (let i = 0; i < len; i++) dta[i] = Math.random() * 2 - 1; const n = ac.createBufferSource(); n.buffer = buf; const f = ac.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 700; const g = ac.createGain(); n.connect(f); f.connect(g); g.connect(ac.destination); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); n.start(t); n.stop(t + dur); }
+  function bSfx(kind) {
+    if (kind === 'deal') { bTone(720, .08, 'square', .08, 0, 200); }                        // DEAL damage: bright zap
+    else if (kind === 'hurt') { bTone(150, .22, 'sawtooth', .13, 0, 55); bNoise(.12, .05); } // TAKE damage: low thud + crunch
+    else if (kind === 'attack') { bNoise(.05, .022); bTone(320, .06, 'triangle', .03); }     // swing
+    else if (kind === 'pickup') { bTone(660, .07, 'square', .06); bTone(990, .08, 'square', .05, .07); }
+    else if (kind === 'heal') { bTone(520, .1, 'sine', .06); bTone(780, .12, 'sine', .05, .08); }
+    else if (kind === 'win') { [523, 659, 784, 1047].forEach((f, i) => bTone(f, .14, 'square', .07, i * .09)); }
+    else if (kind === 'lose') { bTone(300, .3, 'sawtooth', .09, 0, 90); }
+    else if (kind === 'boss') { bTone(90, .45, 'sawtooth', .1, 0, 60); }
+    else if (kind === 'shot') { bTone(470, .09, 'sine', .035, 0, 300); }
+  }
+
   function statsFor(classId, equipped, levels) {
     const c = B.CLASSES[classId]; const s = { ...c.base };
     for (const slot in (equipped || {})) { const id = equipped[slot]; if (!B.GEAR[id]) continue; const mods = B.itemMods(id, (levels && levels[id]) || 0); for (const k in mods) s[k] = (s[k] || 0) + mods[k]; }
@@ -19,13 +37,15 @@
     const plan = B.battlePlan(opts.questIndex || 0);
     const dialog = (opts.dialog && opts.dialog.length ? opts.dialog : B.GENERIC_DIALOG).slice();
     let stats = statsFor(opts.classId, opts.equipped, opts.levels);
+    const DK = { up: 'w', down: 's', left: 'a', right: 'd', attack: 'j', dodge: 'k' };
+    let KEYS = DK; try { KEYS = Object.assign({}, DK, JSON.parse(localStorage.getItem('forge_keys') || '{}')); } catch {}
 
     // ---- build DOM ----
     let root = document.getElementById('battle-root');
     if (!root) { root = document.createElement('div'); root.id = 'battle-root'; document.body.appendChild(root); }
     root.innerHTML = `
       <canvas id="battle-canvas"></canvas>
-      <div class="b-hud"><span class="b-hearts"></span><button class="b-inv">🎒</button><span class="b-wave"></span></div>
+      <div class="b-hud"><button class="b-inv">🎒</button><span class="b-wave"></span></div>
       <div class="b-boss-wrap"><div class="b-boss-fill"></div></div>
       <div class="b-keys"></div>
       <div class="b-toast"></div>
@@ -35,7 +55,7 @@
       <div class="b-overlay"><div><h2></h2><div class="b-loot"></div><div class="b-endbtns"><button class="eq">🎒 EQUIP</button><button class="cta"></button></div></div></div>`;
     root.classList.add('on');
     const cv = root.querySelector('#battle-canvas'), ctx = cv.getContext('2d');
-    const heartsEl = root.querySelector('.b-hearts'), waveEl = root.querySelector('.b-wave');
+    const waveEl = root.querySelector('.b-wave');
     const bossWrap = root.querySelector('.b-boss-wrap'), bossFill = root.querySelector('.b-boss-fill');
     const dlg = root.querySelector('.b-dialog'), dlgLine = dlg.querySelector('.line');
     const overlay = root.querySelector('.b-overlay'), overH2 = overlay.querySelector('h2'), lootEl = overlay.querySelector('.b-loot'), cta = overlay.querySelector('.cta');
@@ -49,13 +69,15 @@
     // On desktop (no touch), show a controls hint at the start; it auto-hides.
     if (!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) {
       const kh = root.querySelector('.b-keys');
-      kh.textContent = `⌨  Move: WASD / Arrow keys   ·   Attack: J or Space   ·   ${cls.dodge === 'block' ? 'Block' : 'Dodge'}: K or Shift`;
+      kh.textContent = `⌨  Move: ${(KEYS.up + KEYS.left + KEYS.down + KEYS.right).toUpperCase()} / Arrows   ·   Attack: ${KEYS.attack.toUpperCase()} or Space   ·   ${cls.dodge === 'block' ? 'Block' : 'Dodge'}: ${KEYS.dodge.toUpperCase()} or Shift`;
       kh.classList.add('on'); setTimeout(() => kh.classList.remove('on'), 6500);
     }
 
     // ---- state ----
-    const player = { x: W / 2, y: H * 0.7, r: 14, hp: stats.hp, max: stats.hp, face: { x: 0, y: -1 },
+    const HEART_HP = 22;
+    const player = { x: W / 2, y: H * 0.7, r: 14, maxHearts: Math.max(3, Math.round(stats.hp / HEART_HP)), face: { x: 0, y: -1 },
       atkCd: 0, dodgeCd: 0, iframe: 0, blocking: false, dashV: null };
+    player.hearts = player.maxHearts;
     let enemies = [], projs = [], loot = [], fx = [];
     let waveIdx = -1, bossActive = false, boss = null, state = 'dialog', dlgQueue = [], runLoot = [], last = 0, raf = 0, aliveFrames = 0, paused = false, shake = 0;
 
@@ -63,12 +85,12 @@
     function openInv() { if (paused || (state !== 'fight' && state !== 'dialog') || !opts.onInventory) return; paused = true; opts.onInventory(resumeFromInv); }
     function resumeFromInv(newEquipped, newLevels) {
       paused = false;
-      if (newEquipped) { const old = player.max; stats = statsFor(opts.classId, newEquipped, newLevels); player.max = stats.hp; player.hp = clamp(player.hp + Math.max(0, player.max - old), 1, player.max); }
+      if (newEquipped) { const old = player.maxHearts; stats = statsFor(opts.classId, newEquipped, newLevels); player.maxHearts = Math.max(3, Math.round(stats.hp / HEART_HP)); player.hearts = clamp(player.hearts + Math.max(0, player.maxHearts - old), 0.25, player.maxHearts); }
     }
 
     // ---- input ----
-    const keys = {}; const press = { atk: false, dodge: false }; const move = { x: 0, y: 0 };
-    const onKey = (e, d) => { keys[e.key.toLowerCase()] = d; if (d && (e.key === ' ' || e.key.toLowerCase() === 'j')) press.atk = true; if (d && (e.key.toLowerCase() === 'k' || e.key === 'Shift')) press.dodge = true; };
+    const keys = {}; const press = { atk: false, dodge: false }; const move = { x: 0, y: 0 }; let touchDodgeHeld = false;
+    const onKey = (e, d) => { const k = e.key.toLowerCase(); keys[k] = d; if (d && (k === ' ' || k === KEYS.attack)) press.atk = true; if (d && (k === 'shift' || k === KEYS.dodge)) press.dodge = true; };
     const kd = e => onKey(e, true), ku = e => onKey(e, false);
     window.addEventListener('keydown', kd); window.addEventListener('keyup', ku);
 
@@ -79,7 +101,9 @@
     const stickEnd = e => { if (e.pointerId !== stickId) return; stickId = null; move.x = move.y = 0; nub.style.transform = ''; };
     stick.addEventListener('pointerup', stickEnd); stick.addEventListener('pointercancel', stickEnd);
     root.querySelector('.b-btn.atk').addEventListener('pointerdown', e => { e.preventDefault(); press.atk = true; });
-    root.querySelector('.b-btn.dodge').addEventListener('pointerdown', e => { e.preventDefault(); press.dodge = true; });
+    const dodgeBtn = root.querySelector('.b-btn.dodge');
+    dodgeBtn.addEventListener('pointerdown', e => { e.preventDefault(); press.dodge = true; touchDodgeHeld = true; });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => dodgeBtn.addEventListener(ev, () => { touchDodgeHeld = false; }));
     // use 'click' (not pointerdown): on touch, opening on pointerdown lets the
     // tap's click land on the modal backdrop and instantly close it.
     invBtn.addEventListener('click', () => openInv());
@@ -90,11 +114,12 @@
     dlg.addEventListener('pointerdown', () => { if (state === 'dialog') nextLine(dlg._then); });
 
     // ---- waves ----
-    function spawnEnemy(typeKey) {
-      const t = B.ENEMIES[typeKey]; const edge = Math.floor(rand(0, 4));
-      const p = edge === 0 ? { x: rand(20, W - 20), y: 20 } : edge === 1 ? { x: W - 20, y: rand(20, H - 20) } : edge === 2 ? { x: rand(20, W - 20), y: H - 20 } : { x: 20, y: rand(20, H - 20) };
-      enemies.push({ type: typeKey, x: p.x, y: p.y, r: t.r, color: t.color, hp: Math.round(t.hp * plan.scale), max: Math.round(t.hp * plan.scale),
-        atk: Math.round(t.atk * plan.scale), speed: t.speed, ai: t.ai, hitCd: 0, shotCd: rand(0.5, t.shotCd || 2), shotSpd: t.shotSpd });
+    function spawnEnemy(typeKey, pos) {
+      const t = B.ENEMIES[typeKey]; let p = pos;
+      if (!p) { const edge = Math.floor(rand(0, 4)); p = edge === 0 ? { x: rand(20, W - 20), y: 20 } : edge === 1 ? { x: W - 20, y: rand(20, H - 20) } : edge === 2 ? { x: rand(20, W - 20), y: H - 20 } : { x: 20, y: rand(20, H - 20) }; }
+      const hp = Math.round(t.hp * plan.hpScale);
+      enemies.push({ type: typeKey, x: p.x, y: p.y, r: t.r, color: t.color, hp, max: hp,
+        atk: Math.round(t.atk * plan.atkScale), speed: t.speed, ai: t.ai, hitCd: 0, shotCd: rand(0.5, t.shotCd || 2), shotSpd: t.shotSpd, flankDir: Math.random() < 0.5 ? 1 : -1 });
     }
     function startNextWave() {
       waveIdx++;
@@ -102,20 +127,32 @@
       else { spawnBoss(); }
     }
     function spawnBoss() {
-      bossActive = true; boss = { type: 'boss', x: W / 2, y: 80, r: B.BOSS.r, color: B.BOSS.color, hp: Math.round(B.BOSS.hp * (1 + (opts.questIndex||0)*0.08)),
-        max: 0, atk: Math.round(B.BOSS.atk * plan.scale), speed: B.BOSS.speed, ai: 'boss', hitCd: 0, shotCd: 1, shotSpd: B.BOSS.shotSpd };
-      boss.max = boss.hp; enemies.push(boss); bossWrap.classList.add('on'); state = 'fight'; waveEl.textContent = '☠ BOSS'; }
+      bossActive = true;
+      const hp = Math.round(B.BOSS.hp * (1 + plan.level * 0.16));
+      boss = { type: 'boss', x: W / 2, y: 80, r: B.BOSS.r, color: B.BOSS.color, hp, max: hp,
+        atk: Math.round(B.BOSS.atk * (1 + plan.level * 0.12)), speed: B.BOSS.speed, ai: 'boss', hitCd: 0, shotSpd: B.BOSS.shotSpd,
+        core: ['spread', 'charge', 'ring'], coreIdx: 0, actCd: 1.2, doSpecial: false, charge: null, burst: null,
+        specials: ['aimed', 'summon', 'cross', 'spiral', 'nova'].slice(0, Math.min(5, plan.level)) };  // +1 random special per level
+      enemies.push(boss); bossWrap.classList.add('on'); state = 'fight'; waveEl.textContent = '☠ BOSS'; bSfx('boss'); }
     function updateWaveLabel() { waveEl.textContent = `Wave ${waveIdx + 1}/${plan.waves.length}`; }
 
     // ---- combat helpers ----
-    function hurtPlayer(dmg) {
-      if (player.iframe > 0) return;
-      let d = Math.max(1, dmg - stats.armor); if (player.blocking) d = Math.max(1, Math.round(d * 0.3));
-      player.hp -= d; player.iframe = 0.5; fx.push({ t: 'hit', x: player.x, y: player.y, life: .2 }); shake = Math.min(12, shake + 7);
-      if (player.hp <= 0) lose();
+    function hurtPlayer(dmg, sx, sy) {
+      if (player.iframe > 0) return;                 // dodging / just-hit i-frames = no damage (misses never call this)
+      let hearts = 1, label = '-1';                  // clean hit = 1 heart
+      if (player.blocking) {
+        // hit is "front" if the attacker is in the direction the player faces
+        let ax = (sx != null ? sx - player.x : -player.face.x), ay = (sy != null ? sy - player.y : -player.face.y);
+        const m = Math.hypot(ax, ay) || 1; const front = ((ax / m) * player.face.x + (ay / m) * player.face.y) > 0;
+        hearts = front ? 0.25 : 0.5; label = front ? '-¼' : '-½';
+      }
+      player.hearts = Math.max(0, Math.round((player.hearts - hearts) * 4) / 4);
+      player.iframe = 0.5; shake = Math.min(12, shake + (hearts >= 1 ? 8 : 4)); bSfx('hurt');
+      fx.push({ t: 'dmg', x: player.x, y: player.y, life: .8, text: label });   // floats over the head
+      if (player.hearts <= 0) lose();
     }
     function damageEnemy(e, dmg) {
-      e.hp -= dmg; fx.push({ t: 'spark', x: e.x, y: e.y, life: .15 });
+      e.hp -= dmg; fx.push({ t: 'spark', x: e.x, y: e.y, life: .15 }); bSfx('deal');
       if (e.hp <= 0) { killEnemy(e); }
     }
     function killEnemy(e) {
@@ -138,23 +175,25 @@
     function update(dt) {
       // player movement
       let ix = move.x, iy = move.y;
-      if (keys['arrowleft'] || keys['a']) ix -= 1; if (keys['arrowright'] || keys['d']) ix += 1;
-      if (keys['arrowup'] || keys['w']) iy -= 1; if (keys['arrowdown'] || keys['s']) iy += 1;
+      if (keys[KEYS.left] || keys['arrowleft']) ix -= 1; if (keys[KEYS.right] || keys['arrowright']) ix += 1;
+      if (keys[KEYS.up] || keys['arrowup']) iy -= 1; if (keys[KEYS.down] || keys['arrowdown']) iy += 1;
       const im = Math.hypot(ix, iy); if (im > 1) { ix /= im; iy /= im; }
       if (im > 0.15) player.face = { x: ix, y: iy };
-      let spd = stats.speed;
+      player.atkCd -= dt; player.dodgeCd -= dt; player.iframe -= dt;
+
+      // block is HELD (Vanguard); dodge is a TAP dash (others)
+      const blockHeld = keys[KEYS.dodge] || keys['shift'] || touchDodgeHeld;
+      player.blocking = (cls.dodge === 'block') && !!blockHeld;
+      if (cls.dodge !== 'block' && press.dodge && player.dodgeCd <= 0) {
+        const f = player.face; player.dashV = { x: f.x * 520, y: f.y * 520, life: 0.16 }; player.iframe = 0.28; player.dodgeCd = 0.6;
+      }
+      press.dodge = false;
+
+      // movement (blocking slows you down)
+      const spd = stats.speed * (player.blocking ? 0.55 : 1);
       if (player.dashV) { player.x += player.dashV.x * dt; player.y += player.dashV.y * dt; player.dashV.life -= dt; if (player.dashV.life <= 0) player.dashV = null; }
       else { player.x += ix * spd * dt; player.y += iy * spd * dt; }
       player.x = clamp(player.x, 16, W - 16); player.y = clamp(player.y, 60, H - 16);
-      player.atkCd -= dt; player.dodgeCd -= dt; player.iframe -= dt; player.blocking = false;
-
-      // dodge / block
-      if (press.dodge && player.dodgeCd <= 0) {
-        if (cls.dodge === 'block') { player.blocking = true; player.iframe = 0.35; player.dodgeCd = 0.6; }
-        else { const f = player.face; player.dashV = { x: f.x * 520, y: f.y * 520, life: 0.16 }; player.iframe = 0.28; player.dodgeCd = 0.7; }
-      }
-      // holding block for vanguard while button held (approx via press flag each frame is one-shot; keep simple)
-      press.dodge = false;
 
       // attack
       if (press.atk && player.atkCd <= 0) { doAttack(); player.atkCd = cls.cd; }
@@ -164,23 +203,27 @@
       for (const e of enemies) {
         e.hitCd -= dt;
         const d = dist(e, player), dx = (player.x - e.x) / (d || 1), dy = (player.y - e.y) / (d || 1);
-        if (e.ai === 'shooter' || e.ai === 'boss') {
-          const want = e.ai === 'boss' ? 140 : 220;
-          const dir = d > want ? 1 : d < want - 40 ? -1 : 0;
-          e.x += dx * e.speed * dir * dt; e.y += dy * e.speed * dir * dt;
-          e.shotCd -= dt;
-          if (e.shotCd <= 0) { e.shotCd = e === boss ? 1.3 : (B.ENEMIES[e.type] ? B.ENEMIES[e.type].shotCd : 1.8);
-            if (e.ai === 'boss') { for (const a of [-0.3, 0, 0.3]) fireEnemyShot(e, dx, dy, a); } else fireEnemyShot(e, dx, dy, 0); }
-        } else { e.x += dx * e.speed * dt; e.y += dy * e.speed * dt; }
+        if (e.ai === 'boss') { bossUpdate(e, dt, dx, dy, d); }
+        else if (e.ai === 'shooter') {                       // keep range + coordinate spacing, fire faster at higher levels
+          const want = 220; const dir = d > want ? 1 : d < want - 40 ? -1 : 0;
+          let sx = 0, sy = 0; for (const o of enemies) { if (o === e || o.ai === 'boss') continue; const dd = dist(o, e); if (dd > 0 && dd < 44) { sx += (e.x - o.x) / dd; sy += (e.y - o.y) / dd; } }
+          e.x += (dx * dir + sx * plan.coord * 0.8) * e.speed * dt; e.y += (dy * dir + sy * plan.coord * 0.8) * e.speed * dt;
+          e.shotCd -= dt; if (e.shotCd <= 0) { e.shotCd = (B.ENEMIES[e.type] ? B.ENEMIES[e.type].shotCd : 1.8) * (1 - plan.coord * 0.35); fireEnemyShot(e, dx, dy, 0); }
+        } else {                                              // chaser: encircle + separate (coordination rises with level)
+          const c = plan.coord; let mvx = dx, mvy = dy;
+          mvx += -dy * c * 0.7 * e.flankDir; mvy += dx * c * 0.7 * e.flankDir;   // tangential = surround
+          for (const o of enemies) { if (o === e || o.ai === 'boss') continue; const dd = dist(o, e); if (dd > 0 && dd < 40) { mvx += (e.x - o.x) / dd * c * 1.2; mvy += (e.y - o.y) / dd * c * 1.2; } }
+          const mm = Math.hypot(mvx, mvy) || 1; e.x += mvx / mm * e.speed * dt; e.y += mvy / mm * e.speed * dt;
+        }
         e.x = clamp(e.x, 12, W - 12); e.y = clamp(e.y, 46, H - 12);
-        if (d < e.r + player.r && e.hitCd <= 0) { hurtPlayer(e.atk); e.hitCd = 0.8; }
+        if (d < e.r + player.r && e.hitCd <= 0) { hurtPlayer(e.atk, e.x, e.y); e.hitCd = 0.8; }
       }
       if (boss) bossFill.style.width = clamp(boss.hp / boss.max * 100, 0, 100) + '%';
 
       // projectiles
       for (const p of projs) { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
         if (p.team === 'player') { for (const e of enemies) if (dist(p, e) < e.r + 5) { damageEnemy(e, p.dmg); p.life = 0; break; } }
-        else if (dist(p, player) < player.r + 5) { hurtPlayer(p.dmg); p.life = 0; }
+        else if (dist(p, player) < player.r + 5) { hurtPlayer(p.dmg, p.x, p.y); p.life = 0; }
       }
       projs = projs.filter(p => p.life > 0 && p.x > -20 && p.x < W + 20 && p.y > -20 && p.y < H + 20);
 
@@ -198,6 +241,7 @@
     }
 
     function doAttack() {
+      bSfx('attack');
       if (cls.attack === 'shot') {
         let tx = player.face.x, ty = player.face.y; // auto-aim nearest for mobile feel
         let near = null, nd = 1e9; for (const e of enemies) { const d = dist(e, player); if (d < nd) { nd = d; near = e; } }
@@ -214,9 +258,39 @@
       }
     }
     function fireEnemyShot(e, dx, dy, spread) { const a = Math.atan2(dy, dx) + spread; projs.push({ x: e.x, y: e.y, vx: Math.cos(a) * (e.shotSpd || 180), vy: Math.sin(a) * (e.shotSpd || 180), life: 3, dmg: e.atk, team: 'enemy', color: '#ff88aa' }); }
+    function mkEShot(e, ux, uy) { projs.push({ x: e.x, y: e.y, vx: ux * (e.shotSpd || 200), vy: uy * (e.shotSpd || 200), life: 3.2, dmg: e.atk, team: 'enemy', color: '#ff88aa' }); }
+    // Boss AI: cycles 3 core patterns + fires a random "special" (one more per difficulty level).
+    function bossUpdate(e, dt, dx, dy, d) {
+      if (e.charge) { e.x += e.charge.x * dt; e.y += e.charge.y * dt; e.charge.t -= dt; if (e.charge.t <= 0) e.charge = null; }
+      else { const want = 150; const dir = d > want + 30 ? 1 : d < want - 30 ? -1 : 0; e.x += dx * e.speed * 0.6 * dir * dt; e.y += dy * e.speed * 0.6 * dir * dt; }
+      if (e.burst) { e.burst.t -= dt; if (e.burst.t <= 0 && e.burst.n > 0) { bossBurst(e); e.burst.n--; e.burst.t = e.burst.interval; if (e.burst.n <= 0) e.burst = null; } }
+      e.actCd -= dt;
+      if (e.actCd <= 0 && !e.burst && !e.charge) {
+        e.actCd = 1.5;
+        if (e.doSpecial && e.specials.length) { bossAttack(e, e.specials[Math.floor(Math.random() * e.specials.length)], dx, dy); e.doSpecial = false; }
+        else { bossAttack(e, e.core[e.coreIdx % 3], dx, dy); e.coreIdx++; e.doSpecial = true; }
+      }
+    }
+    function bossAttack(e, kind, dx, dy) {
+      const m = Math.hypot(dx, dy) || 1, nx = dx / m, ny = dy / m;
+      if (kind === 'spread') { for (const a of [-0.4, -0.2, 0, 0.2, 0.4]) fireEnemyShot(e, dx, dy, a); bSfx('shot'); }
+      else if (kind === 'ring') { for (let i = 0; i < 10; i++) { const a = i / 10 * 6.2832; mkEShot(e, Math.cos(a), Math.sin(a)); } bSfx('boss'); }
+      else if (kind === 'charge') { e.charge = { x: nx * 380, y: ny * 380, t: 0.5 }; bSfx('boss'); }
+      else if (kind === 'nova') { for (let i = 0; i < 16; i++) { const a = i / 16 * 6.2832; mkEShot(e, Math.cos(a), Math.sin(a)); } bSfx('boss'); }
+      else if (kind === 'summon') { const k = 1 + Math.floor(Math.random() * 2); for (let i = 0; i < k; i++) spawnEnemy('grunt', { x: e.x + rand(-30, 30), y: e.y + rand(20, 44) }); bSfx('boss'); }
+      else if (kind === 'aimed') { e.burst = { mode: 'aim', n: 5, interval: 0.12, t: 0 }; }
+      else if (kind === 'cross') { e.burst = { mode: 'cross', n: 3, interval: 0.18, t: 0, ang: 0 }; }
+      else if (kind === 'spiral') { e.burst = { mode: 'spiral', n: 16, interval: 0.06, t: 0, ang: Math.random() * 6.2832 }; }
+    }
+    function bossBurst(e) {
+      if (e.burst.mode === 'aim') fireEnemyShot(e, (player.x - e.x), (player.y - e.y), rand(-0.06, 0.06));
+      else if (e.burst.mode === 'cross') { for (let i = 0; i < 4; i++) { const a = e.burst.ang + i * 1.5708; mkEShot(e, Math.cos(a), Math.sin(a)); } e.burst.ang += 0.4; }
+      else if (e.burst.mode === 'spiral') { const a = e.burst.ang; mkEShot(e, Math.cos(a), Math.sin(a)); e.burst.ang += 0.5; }
+      bSfx('shot');
+    }
     function grab(l) {
-      if (l.potion) { const h = l.heal || 24; player.hp = clamp(player.hp + h, 0, player.max); flash('+' + h + ' HP', '#5cff9d'); return; }
-      runLoot.push(l.id); flash(B.GEAR[l.id].name + '!', B.TIER_COLOR[l.tier]); }
+      if (l.potion) { player.hearts = clamp(player.hearts + 1, 0, player.maxHearts); flash('+1 ❤', '#5cff9d'); bSfx('heal'); return; }
+      runLoot.push(l.id); flash(B.GEAR[l.id].name + '!', B.TIER_COLOR[l.tier]); bSfx('pickup'); }
     function flash(text, color) { toast.textContent = text; toast.style.borderColor = color; toast.style.color = color; toast.classList.remove('on'); void toast.offsetWidth; toast.classList.add('on'); }
 
     // ---- render (bright cartoon-brawler look; original art) ----
@@ -278,9 +352,18 @@
       // fx on top
       for (const f of fx) drawFx(f);
       ctx.restore();
-      // hearts (DOM)
-      const total = Math.max(1, Math.round(player.max / HEART)), filled = Math.max(0, Math.ceil(player.hp / HEART));
-      heartsEl.textContent = '❤'.repeat(Math.min(filled, total)) + '🤍'.repeat(Math.max(0, total - filled));
+      drawHearts();                                  // red hearts, quarter-precision, on canvas (no shake)
+    }
+    function drawHearts() {
+      const n = player.maxHearts, avail = W - 44;
+      let s = 12, sp = 2 * s + 6; if (n * sp > avail) { sp = Math.max(13, avail / n); s = Math.max(5, (sp - 4) / 2); }
+      const y = s + 10;
+      for (let i = 0; i < n; i++) {
+        const cx = 20 + s + i * sp, frac = clamp(player.hearts - i, 0, 1);
+        heartShape(cx, y, s); ctx.fillStyle = '#3a1020'; ctx.fill();                 // empty
+        if (frac > 0) { ctx.save(); heartShape(cx, y, s); ctx.clip(); ctx.fillStyle = '#ff2b4e'; ctx.fillRect(cx - s - 1, y - s - 1, (2 * s + 2) * frac, 3 * s); ctx.restore(); }
+        heartShape(cx, y, s); ctx.lineWidth = 2; ctx.strokeStyle = '#12060a'; ctx.stroke();   // outline
+      }
     }
     function drawFx(f) {
       if (f.t === 'slash') { ctx.globalAlpha = Math.min(1, f.life * 5); ctx.lineCap = 'round';
@@ -289,11 +372,12 @@
       else if (f.t === 'burst') { ctx.globalAlpha = Math.min(1, f.life * 4); ctx.strokeStyle = '#fff'; ctx.lineWidth = 7; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * (1 - f.life * 2.2), 0, 7); ctx.stroke(); ctx.strokeStyle = f.color; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * (1 - f.life * 2.2), 0, 7); ctx.stroke(); ctx.globalAlpha = 1; }
       else if (f.t === 'pop') { ctx.globalAlpha = Math.min(1, f.life * 3); ctx.fillStyle = f.color; const rrad = 24 * (1 - f.life * 3); for (let i = 0; i < 8; i++) { const a = i / 8 * 7; ctx.beginPath(); ctx.arc(f.x + Math.cos(a) * rrad, f.y + Math.sin(a) * rrad, 4.5, 0, 7); ctx.fill(); } ctx.globalAlpha = 1; }
       else if (f.t === 'hit') { ctx.globalAlpha = Math.min(1, f.life * 4); ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(f.x, f.y, 22 * (1 - f.life * 4) + 6, 0, 7); ctx.stroke(); ctx.globalAlpha = 1; }
+      else if (f.t === 'dmg') { ctx.globalAlpha = Math.min(1, f.life * 1.6); ctx.fillStyle = '#ff3b5c'; ctx.strokeStyle = '#5a0010'; ctx.lineWidth = 3; ctx.font = 'bold 22px system-ui, sans-serif'; ctx.textAlign = 'center'; const ty = f.y - player.r - 14 - (0.8 - f.life) * 42; ctx.strokeText(f.text, f.x, ty); ctx.fillText(f.text, f.x, ty); ctx.textAlign = 'left'; ctx.globalAlpha = 1; }
     }
 
     // ---- end states ----
     async function win() {
-      state = 'won'; teardownInput();
+      state = 'won'; teardownInput(); bSfx('win');
       const items = [...runLoot];
       overH2.textContent = 'VICTORY!'; overlay.classList.remove('lose');
       lootEl.innerHTML = items.length ? items.map(id => { const g = B.GEAR[id]; return `<div class="item" style="border-color:${B.TIER_COLOR[g.tier]};color:${B.TIER_COLOR[g.tier]}">${g.tier} · ${g.name}</div>`; }).join('') : '<div class="item">No gear this time — the trial still awaits.</div>';
@@ -304,7 +388,7 @@
       cta.onclick = () => { cleanup(); (opts.onContinue || opts.onExit || (() => {}))({ xp: plan.xp, loot: items }); };
     }
     function lose() {
-      if (state === 'lost') return; state = 'lost'; teardownInput();
+      if (state === 'lost') return; state = 'lost'; teardownInput(); bSfx('lose');
       overH2.textContent = 'DEFEATED'; overlay.classList.add('lose');
       lootEl.innerHTML = '<div class="item">The Gatekeeper holds. Regroup and try again.</div>';
       eqBtn.style.display = ''; eqBtn.textContent = 'FLEE'; eqBtn.onclick = () => { cleanup(); opts.onExit && opts.onExit(); };
@@ -323,7 +407,7 @@
     function cleanup() { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); root.classList.remove('on'); root.innerHTML = ''; }
 
     // debug hook (handy for testing; harmless)
-    window.__forgeBattle = () => ({ enemies: enemies.length, state, hp: player.hp, max: player.max, wave: waveIdx, boss: bossActive, loot: runLoot.length });
+    window.__forgeBattle = () => ({ enemies: enemies.length, state, hearts: player.hearts, maxHearts: player.maxHearts, wave: waveIdx, boss: bossActive, loot: runLoot.length, px: player.x, py: player.y, elist: enemies.map(e => ({ x: e.x, y: e.y, boss: e.ai === 'boss' })), specials: boss ? boss.specials.length : 0 });
 
     // intro dialog, then first wave
     showDialog([dialog[0] || 'Ready your weapon.'], startNextWave);

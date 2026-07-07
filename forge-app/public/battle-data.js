@@ -69,21 +69,24 @@ function itemMods(itemId, level) { const g = GEAR[itemId]; const f = 1 + (level 
 const NORMAL_LOOT = { Common:['wood_sword','leather','charm'], Rare:['iron_sword','chainmail','swift_boots'], Legendary:['flame_blade','aegis','focus_amulet'] };
 const MYTHIC_BY_CLASS = { zeppelin:'myth_zeppelin', leo:'myth_leo', jonah:'myth_jonah', jyana:'myth_jyana' };
 
-// Difficulty by quest index (0..16): count/strength of waves + enemy scaling.
+// Difficulty by quest index / "level" (0..16).
 function battlePlan(questIndex) {
-  const scale = 1 + questIndex * 0.11;                 // enemies get tougher
-  const waveCount = 2 + Math.floor(questIndex / 3);    // more waves later
+  const level = questIndex;
+  const hpScale  = 1 + level * 0.20;                   // toughness ramps hard
+  const atkScale = 1 + level * 0.14;                   // power ramps
+  const coord    = Math.min(1, level / 9);             // mob coordination 0..1
+  const waveCount = 2 + Math.floor(level / 3);         // more waves later
   const waves = [];
   for (let w = 0; w < waveCount; w++) {
-    const n = 3 + Math.floor(questIndex / 4) + w;      // more enemies per later wave
+    const n = 3 + Math.floor(level / 4) + w;           // more enemies per later wave
     const types = [];
     for (let i = 0; i < n; i++) {
       const r = Math.random();
-      types.push(questIndex >= 4 && r < 0.18 ? 'brute' : r < 0.4 ? 'zap' : 'grunt');
+      types.push(level >= 4 && r < 0.18 ? 'brute' : r < 0.4 ? 'zap' : 'grunt');
     }
     waves.push(types);
   }
-  return { waves, scale, xp: 60 + questIndex * 10 };
+  return { waves, level, hpScale, atkScale, coord, xp: 60 + level * 10 };
 }
 
 // A little teaching dialog shown between waves (generic fallback; per-quest set in Stage 3).

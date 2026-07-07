@@ -123,7 +123,7 @@ function renderGear(){
       return `<div class="invrow"><button class="item" ${locked?'disabled':`data-eq="${id}" data-slot="${g.slot}"`} style="border-color:${TC[g.tier]};color:${TC[g.tier]}">${nm}${n>1?` ×${n}`:''} <small>[${g.slot} · ${mods}]</small>${locked?' 🔒':''}</button>${upBtn}${sv?`<button class="scrap" data-scrap="${id}" title="scrap for gold">♻ ${sv}g</button>`:''}</div>`; }).join('') || '<div class="empty">No gear yet — win battles to loot some.</div>';
   $('#gear-body').innerHTML = `
     <div class="statgrid">
-      <div>❤ Health <b>${st.hp}</b></div><div>⚔ Attack <b>${st.atk}</b></div>
+      <div>❤ Hearts <b>${Math.max(3,Math.round(st.hp/22))}</b></div><div>⚔ Attack <b>${st.atk}</b></div>
       <div>🛡 Armor <b>${st.armor}</b></div><div>👟 Speed <b>${st.speed}</b></div>
     </div>
     <div class="goldline">💰 <b>${prof.gold||0}</b> gold <button id="sell-all" class="pixel-btn ghost">Sell all junk</button></div>
@@ -209,8 +209,25 @@ let pendingBattleResume=null;
 function openInventoryOverlay(resume){ pendingBattleResume = resume || null; renderGear(); $('#gear-modal').classList.remove('hidden'); }
 function closeGear(){ $('#gear-modal').classList.add('hidden'); if(pendingBattleResume){ const r=pendingBattleResume; pendingBattleResume=null; r(profileOf(ME).equipped, profileOf(ME).levels); } }
 
+// ---- battle keybinds (PC) ----
+const KEY_DEFAULTS={up:'w',down:'s',left:'a',right:'d',attack:'j',dodge:'k'};
+function getKeys(){ try{ return Object.assign({},KEY_DEFAULTS,JSON.parse(localStorage.getItem('forge_keys')||'{}')); }catch{ return {...KEY_DEFAULTS}; } }
+let rebinding=null;
+function renderKeys(){
+  const k=getKeys(), rows=[['up','Move Up'],['down','Move Down'],['left','Move Left'],['right','Move Right'],['attack','Attack'],['dodge','Block / Dodge']];
+  $('#keys-body').innerHTML=rows.map(([id,label])=>`<div class="keyrow"><span>${label}</span><button class="keybtn" data-key="${id}">${(k[id]||'').toUpperCase()}</button></div>`).join('');
+  $('#keys-body').querySelectorAll('[data-key]').forEach(b=>b.onclick=()=>{ rebinding=b.dataset.key;
+    $('#keys-body').querySelectorAll('.keybtn').forEach(x=>x.classList.remove('await')); b.classList.add('await'); b.textContent='press…'; });
+}
+function openKeys(){ rebinding=null; renderKeys(); $('#keys-modal').classList.remove('hidden'); }
+
 function wireChrome(){
   $('#btn-gm').onclick = ()=>{ initAudio(); loginGM(); };
+  $('#btn-keys').onclick = ()=>{ sfx('click'); openKeys(); };
+  $('#keys-reset').onclick = ()=>{ localStorage.removeItem('forge_keys'); renderKeys(); };
+  window.addEventListener('keydown',(e)=>{ if(!rebinding)return; e.preventDefault(); const key=e.key.toLowerCase();
+    if(key.length===1 && key!==' '){ const k=getKeys(); k[rebinding]=key; localStorage.setItem('forge_keys',JSON.stringify(k)); }
+    rebinding=null; renderKeys(); });
   $('#btn-gear').onclick = ()=>{ sfx('click'); renderGear(); $('#gear-modal').classList.remove('hidden'); };
   $('#btn-battle').onclick = ()=>{ initAudio(); sfx('click'); launchBattle(); };
   $('#btn-switch').onclick = ()=>{ sfx('click'); stopMusic(); ME=null; localStorage.removeItem('forge_crew_id');

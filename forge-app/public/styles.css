@@ -204,6 +204,13 @@ img{image-rendering:pixelated}
 .item[disabled]{opacity:.5}
 .item.on{cursor:pointer}
 
+/* ================= BATTLE KEYS ================= */
+.keys-help{font-family:var(--font-retro);font-size:1.15rem;color:var(--muted);margin:.4rem 0 1rem;line-height:1.3}
+.keyrow{display:flex;justify-content:space-between;align-items:center;padding:.45rem 0;font-family:var(--font-retro);font-size:1.35rem;border-bottom:1px solid var(--line)}
+.keybtn{font-family:var(--font-pixel);font-size:.7rem;color:#20142b;background:var(--ember2);border:0;border-radius:8px;padding:.5rem .8rem;min-width:70px;text-align:center}
+.keybtn.await{background:var(--mana);color:#fff}
+#keys-reset{margin-top:1rem}
+
 /* ================= LEVEL UP ================= */
 .levelup{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:#05040aee;animation:fade .2s}
 .levelup-inner{text-align:center;animation:lupop .5s cubic-bezier(.2,1.4,.4,1)}

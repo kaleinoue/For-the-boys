@@ -42,6 +42,7 @@
         <button id="btn-gear" class="pixel-btn">🎒 GEAR</button>
         <button id="btn-guild" class="pixel-btn">🏆 GUILD</button>
         <select id="music-pick" class="music-pick" title="music"></select>
+        <button id="btn-keys" class="pixel-btn" title="battle keys (PC)">⌨️</button>
         <button id="btn-sound" class="pixel-btn" title="sound effects">🔊</button>
         <button id="btn-switch" class="pixel-btn">↺ HERO</button>
       </div>
@@ -65,6 +66,17 @@
       <button class="modal-close" data-close>✕</button>
       <h2 class="guild-title">🎒 <span id="gear-name"></span></h2>
       <div id="gear-body"></div>
+    </div>
+  </div>
+
+  <!-- ============ BATTLE KEYS (PC) ============ -->
+  <div id="keys-modal" class="modal hidden">
+    <div class="modal-card">
+      <button class="modal-close" data-close>✕</button>
+      <h2 class="guild-title">⌨️ Battle Keys (PC)</h2>
+      <p class="keys-help">Tap a key box, then press the key you want. Arrow keys, Space (attack) and Shift (block/dodge) always work too. On phones you use the on-screen buttons.</p>
+      <div id="keys-body"></div>
+      <button id="keys-reset" class="pixel-btn ghost">reset to defaults</button>
     </div>
   </div>
 
