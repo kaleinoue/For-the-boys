@@ -116,14 +116,14 @@
     // ---- waves ----
     function spawnEnemy(typeKey, pos) {
       const t = B.ENEMIES[typeKey]; let p = pos;
-      if (!p) { const edge = Math.floor(rand(0, 4)); p = edge === 0 ? { x: rand(20, W - 20), y: 20 } : edge === 1 ? { x: W - 20, y: rand(20, H - 20) } : edge === 2 ? { x: rand(20, W - 20), y: H - 20 } : { x: 20, y: rand(20, H - 20) }; }
+      if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') { const edge = Math.floor(rand(0, 4)); p = edge === 0 ? { x: rand(20, W - 20), y: 20 } : edge === 1 ? { x: W - 20, y: rand(20, H - 20) } : edge === 2 ? { x: rand(20, W - 20), y: H - 20 } : { x: 20, y: rand(20, H - 20) }; }
       const hp = Math.round(t.hp * plan.hpScale);
       enemies.push({ type: typeKey, x: p.x, y: p.y, r: t.r, color: t.color, hp, max: hp,
         atk: Math.round(t.atk * plan.atkScale), speed: t.speed, ai: t.ai, hitCd: 0, shotCd: rand(0.5, t.shotCd || 2), shotSpd: t.shotSpd, flankDir: Math.random() < 0.5 ? 1 : -1 });
     }
     function startNextWave() {
       waveIdx++;
-      if (waveIdx < plan.waves.length) { plan.waves[waveIdx].forEach(spawnEnemy); state = 'fight'; updateWaveLabel(); }
+      if (waveIdx < plan.waves.length) { plan.waves[waveIdx].forEach(t => spawnEnemy(t)); state = 'fight'; updateWaveLabel(); }
       else { spawnBoss(); }
     }
     function spawnBoss() {
