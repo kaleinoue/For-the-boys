@@ -8,9 +8,9 @@
   const rand = (a, b) => a + Math.random() * (b - a);
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
-  function statsFor(classId, equipped) {
+  function statsFor(classId, equipped, levels) {
     const c = B.CLASSES[classId]; const s = { ...c.base };
-    for (const slot in (equipped || {})) { const it = B.GEAR[equipped[slot]]; if (it) for (const k in it.mods) s[k] = (s[k] || 0) + it.mods[k]; }
+    for (const slot in (equipped || {})) { const id = equipped[slot]; if (!B.GEAR[id]) continue; const mods = B.itemMods(id, (levels && levels[id]) || 0); for (const k in mods) s[k] = (s[k] || 0) + mods[k]; }
     return s;
   }
 
@@ -18,7 +18,7 @@
     const cls = B.CLASSES[opts.classId] || B.CLASSES.zeppelin;
     const plan = B.battlePlan(opts.questIndex || 0);
     const dialog = (opts.dialog && opts.dialog.length ? opts.dialog : B.GENERIC_DIALOG).slice();
-    let stats = statsFor(opts.classId, opts.equipped);
+    let stats = statsFor(opts.classId, opts.equipped, opts.levels);
 
     // ---- build DOM ----
     let root = document.getElementById('battle-root');
@@ -53,9 +53,9 @@
 
     // open inventory mid-battle (pauses); resume recomputes stats from new gear
     function openInv() { if (paused || (state !== 'fight' && state !== 'dialog') || !opts.onInventory) return; paused = true; opts.onInventory(resumeFromInv); }
-    function resumeFromInv(newEquipped) {
+    function resumeFromInv(newEquipped, newLevels) {
       paused = false;
-      if (newEquipped) { const old = player.max; stats = statsFor(opts.classId, newEquipped); player.max = stats.hp; player.hp = clamp(player.hp + Math.max(0, player.max - old), 1, player.max); }
+      if (newEquipped) { const old = player.max; stats = statsFor(opts.classId, newEquipped, newLevels); player.max = stats.hp; player.hp = clamp(player.hp + Math.max(0, player.max - old), 1, player.max); }
     }
 
     // ---- input ----

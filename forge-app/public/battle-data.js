@@ -47,15 +47,24 @@ const DROP_RATES = { Common:0.32, Rare:0.10, Legendary:0.02 };
 const SCRAP_VALUE = { Common:5, Rare:20, Legendary:60 };
 
 // Crafting: combine N copies of an item (+gold) to forge the next tier in its
-// slot. Higher tiers need more copies. Legendary/Mythic can't be upgraded.
+// slot. Higher tiers need more copies. Mythic can't be crafted.
 const UPGRADE = {
-  wood_sword:  { to:'iron_sword',   need:3, gold:25 },
-  leather:     { to:'chainmail',    need:3, gold:25 },
-  charm:       { to:'swift_boots',  need:3, gold:25 },
-  iron_sword:  { to:'flame_blade',  need:5, gold:80 },
-  chainmail:   { to:'aegis',        need:5, gold:80 },
-  swift_boots: { to:'focus_amulet', need:5, gold:80 },
+  wood_sword:  { to:'iron_sword',   need:10, gold:50 },
+  leather:     { to:'chainmail',    need:10, gold:50 },
+  charm:       { to:'swift_boots',  need:10, gold:50 },
+  iron_sword:  { to:'flame_blade',  need:25, gold:200 },
+  chainmail:   { to:'aegis',        need:25, gold:200 },
+  swift_boots: { to:'focus_amulet', need:25, gold:200 },
 };
+
+// Legendaries don't jump tiers — they LEVEL UP into a stronger version of the
+// same item, consuming Rares of that slot + gold. Each level = +20% stats.
+const RARE_OF_SLOT = { weapon:'iron_sword', armor:'chainmail', trinket:'swift_boots' };
+const LEG_MAX_LEVEL = 5;
+const LEG_FODDER_NEED = 5;                              // Rares consumed per level
+const legLevelGold = (level) => 300 * (level + 1);      // gold per level-up
+// stat mods scaled for a leveled item (+20% per level, rounded)
+function itemMods(itemId, level) { const g = GEAR[itemId]; const f = 1 + (level || 0) * 0.20; const o = {}; for (const k in g.mods) o[k] = Math.round(g.mods[k] * f); return o; }
 
 const NORMAL_LOOT = { Common:['wood_sword','leather','charm'], Rare:['iron_sword','chainmail','swift_boots'], Legendary:['flame_blade','aegis','focus_amulet'] };
 const MYTHIC_BY_CLASS = { zeppelin:'myth_zeppelin', leo:'myth_leo', jonah:'myth_jonah', jyana:'myth_jyana' };
@@ -108,6 +117,6 @@ const QUEST_DIALOG = {
 };
 
 if (typeof window !== 'undefined') {
-  window.BATTLE = { CLASSES, ENEMIES, BOSS, GEAR, TIER_COLOR, DROP_RATES, SCRAP_VALUE, UPGRADE, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, GENERIC_DIALOG, QUEST_DIALOG };
+  window.BATTLE = { CLASSES, ENEMIES, BOSS, GEAR, TIER_COLOR, DROP_RATES, SCRAP_VALUE, UPGRADE, RARE_OF_SLOT, LEG_MAX_LEVEL, LEG_FODDER_NEED, legLevelGold, itemMods, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, GENERIC_DIALOG, QUEST_DIALOG };
 }
-if (typeof module !== 'undefined') module.exports = { CLASSES, ENEMIES, BOSS, GEAR, TIER_COLOR, DROP_RATES, SCRAP_VALUE, UPGRADE, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, GENERIC_DIALOG, QUEST_DIALOG };
+if (typeof module !== 'undefined') module.exports = { CLASSES, ENEMIES, BOSS, GEAR, TIER_COLOR, DROP_RATES, SCRAP_VALUE, UPGRADE, RARE_OF_SLOT, LEG_MAX_LEVEL, LEG_FODDER_NEED, legLevelGold, itemMods, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, GENERIC_DIALOG, QUEST_DIALOG };

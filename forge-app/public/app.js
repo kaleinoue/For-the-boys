@@ -90,11 +90,10 @@ function renderAdminBar(){
 
 // ---- character / inventory (gear affects battle stats) ----
 function battleClass(){ return (ME && ME!=='gm') ? ME : 'zeppelin'; }
-function profileOf(id){ const p = STATE.crew[id]?.steps?.__profile; return { inventory:(p&&p.inventory)||[], equipped:(p&&p.equipped)||{}, battles:(p&&p.battles)||{}, gold:(p&&p.gold)||0 }; }
+function profileOf(id){ const p = STATE.crew[id]?.steps?.__profile; return { inventory:(p&&p.inventory)||[], equipped:(p&&p.equipped)||{}, battles:(p&&p.battles)||{}, gold:(p&&p.gold)||0, levels:(p&&p.levels)||{} }; }
 function computeStats(id){
-  const G=window.BATTLE.GEAR, base={...window.BATTLE.CLASSES[battleClass()].base};
-  const eq=profileOf(id).equipped;
-  for(const slot in eq){ const it=G[eq[slot]]; if(it) for(const k in it.mods) base[k]=(base[k]||0)+it.mods[k]; }
+  const B=window.BATTLE, base={...B.CLASSES[battleClass()].base}, prof=profileOf(id);
+  for(const slot in prof.equipped){ const iid=prof.equipped[slot]; if(!B.GEAR[iid])continue; const mods=B.itemMods(iid,(prof.levels[iid])||0); for(const k in mods) base[k]=(base[k]||0)+mods[k]; }
   return base;
 }
 function renderGear(){
@@ -102,19 +101,26 @@ function renderGear(){
   $('#gear-name').textContent = `${c.name} — ${window.BATTLE.CLASSES[battleClass()].klass}`;
   const prof=profileOf(ME), st=computeStats(ME);
   const slots=['weapon','armor','trinket'];
-  const slotHtml = slots.map(s=>{ const id=prof.equipped[s]; const g=id&&G[id];
-    return `<div class="slot"><span class="slot-name">${s}</span>${g?`<button class="item on" data-uneq="${s}" style="border-color:${TC[g.tier]};color:${TC[g.tier]}">${g.name} ✕</button>`:`<span class="empty">— empty —</span>`}</div>`; }).join('');
+  const slotHtml = slots.map(s=>{ const id=prof.equipped[s]; const g=id&&G[id]; const lv=(id&&prof.levels[id])||0;
+    return `<div class="slot"><span class="slot-name">${s}</span>${g?`<button class="item on" data-uneq="${s}" style="border-color:${TC[g.tier]};color:${TC[g.tier]}">${g.name}${lv?` +${lv}`:''} ✕</button>`:`<span class="empty">— empty —</span>`}</div>`; }).join('');
   // inventory grouped by id with counts, excluding equipped
   const counts={}; prof.inventory.forEach(id=>counts[id]=(counts[id]||0)+1);
   const rawCounts={...counts};                          // all copies (incl equipped) — for upgrade checks
   Object.values(prof.equipped).forEach(id=>{ if(counts[id]) counts[id]--; });
   const order=['Mythic','Legendary','Rare','Common'];
   const invHtml = Object.entries(counts).filter(([id,n])=>n>0&&G[id]).sort((a,b)=>order.indexOf(G[a[0]].tier)-order.indexOf(G[b[0]].tier))
-    .map(([id,n])=>{ const g=G[id]; const locked=g.klass&&g.klass!==ME; const mods=Object.entries(g.mods).map(([k,v])=>`${k}+${v}`).join(' '); const sv=window.BATTLE.SCRAP_VALUE[g.tier];
-      const up=window.BATTLE.UPGRADE[id];
-      const canUp = up && (rawCounts[id]>=up.need) && ((prof.gold||0)>=up.gold);
-      const upBtn = up?`<button class="upg" data-upg="${id}" ${canUp?'':'disabled'} title="combine ${up.need}× + ${up.gold}g → ${G[up.to].name}">⬆ ${up.need}×+${up.gold}g</button>`:'';
-      return `<div class="invrow"><button class="item" ${locked?'disabled':`data-eq="${id}" data-slot="${g.slot}"`} style="border-color:${TC[g.tier]};color:${TC[g.tier]}">${g.name}${n>1?` ×${n}`:''} <small>[${g.slot} · ${mods}]</small>${locked?' 🔒':''}</button>${upBtn}${sv?`<button class="scrap" data-scrap="${id}" title="scrap for gold">♻ ${sv}g</button>`:''}</div>`; }).join('') || '<div class="empty">No gear yet — win battles to loot some.</div>';
+    .map(([id,n])=>{ const B=window.BATTLE, g=G[id]; const locked=g.klass&&g.klass!==ME; const lvl=prof.levels[id]||0;
+      const mods=Object.entries(B.itemMods(id,lvl)).map(([k,v])=>`${k}+${v}`).join(' '); const sv=B.SCRAP_VALUE[g.tier];
+      let upBtn=''; const tier=B.UPGRADE[id];
+      if(tier){ const can=(rawCounts[id]>=tier.need)&&((prof.gold||0)>=tier.gold);
+        upBtn=`<button class="upg" data-upg="${id}" ${can?'':'disabled'} title="combine ${tier.need}× + ${tier.gold}g → ${G[tier.to].name}">⬆ ${tier.need}×+${tier.gold}g</button>`; }
+      else if(g.tier==='Legendary'){
+        if(lvl>=B.LEG_MAX_LEVEL){ upBtn=`<button class="upg" disabled>MAX Lv</button>`; }
+        else { const fod=B.RARE_OF_SLOT[g.slot], need=B.LEG_FODDER_NEED, cost=B.legLevelGold(lvl);
+          const can=(rawCounts[fod]>=need)&&((prof.gold||0)>=cost);
+          upBtn=`<button class="upg" data-upg="${id}" ${can?'':'disabled'} title="level up: ${need}× ${G[fod].name} + ${cost}g">⬆ Lv${lvl+1} (${need}× rare +${cost}g)</button>`; } }
+      const nm=`${g.name}${lvl?` +${lvl}`:''}`;
+      return `<div class="invrow"><button class="item" ${locked?'disabled':`data-eq="${id}" data-slot="${g.slot}"`} style="border-color:${TC[g.tier]};color:${TC[g.tier]}">${nm}${n>1?` ×${n}`:''} <small>[${g.slot} · ${mods}]</small>${locked?' 🔒':''}</button>${upBtn}${sv?`<button class="scrap" data-scrap="${id}" title="scrap for gold">♻ ${sv}g</button>`:''}</div>`; }).join('') || '<div class="empty">No gear yet — win battles to loot some.</div>';
   $('#gear-body').innerHTML = `
     <div class="statgrid">
       <div>❤ Health <b>${st.hp}</b></div><div>⚔ Attack <b>${st.atk}</b></div>
@@ -129,11 +135,13 @@ function renderGear(){
   $('#gear-body').querySelectorAll('[data-upg]').forEach(b=>b.onclick=()=>upgrade(b.dataset.upg));
 }
 async function upgrade(id){
-  const G=window.BATTLE.GEAR, r=window.BATTLE.UPGRADE[id];
-  if(!confirm(`Combine ${r.need}× ${G[id].name} + ${r.gold} gold into ${G[r.to].name}?`)) return;
+  const B=window.BATTLE, G=B.GEAR, g=G[id]; let msg;
+  if(B.UPGRADE[id]){ const r=B.UPGRADE[id]; msg=`Combine ${r.need}× ${g.name} + ${r.gold} gold into ${G[r.to].name}?`; }
+  else { const lvl=profileOf(ME).levels[id]||0, fod=B.RARE_OF_SLOT[g.slot]; msg=`Level ${g.name} to +${lvl+1}?  Costs ${B.LEG_FODDER_NEED}× ${G[fod].name} + ${B.legLevelGold(lvl)} gold.`; }
+  if(!confirm(msg)) return;
   const d=await fetch('/api/profile/upgrade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({crewId:ME,itemId:id})}).then(x=>x.json());
   if(d.error){ alert(d.error); return; }
-  STATE=d.state; sfx('crit'); toast(`⬆ Forged ${G[r.to].name}!`); renderGear(); renderHUD();
+  STATE=d.state; sfx('crit'); toast(d.made?`⬆ Forged ${G[d.made].name}!`:`⬆ ${g.name} → +${d.level}!`); renderGear(); renderHUD();
 }
 async function scrap(id){
   const g=window.BATTLE.GEAR[id];
@@ -158,7 +166,7 @@ function launchBattle(){
   const qi=Math.min(16, Object.keys(prof.battles).length);   // difficulty grows as you clear
   stopMusic();
   const hasMythic = prof.inventory.includes(window.BATTLE.MYTHIC_BY_CLASS[battleClass()]);
-  window.ForgeBattle.start({ classId: battleClass(), questIndex: qi, equipped: prof.equipped, hasMythic,
+  window.ForgeBattle.start({ classId: battleClass(), questIndex: qi, equipped: prof.equipped, levels: prof.levels, hasMythic,
     onWin: async (res)=>{
       const d=await fetch('/api/battle/win',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({crewId:ME,questId:'train'+qi,xp:res.xp,loot:res.loot})}).then(r=>r.json());
@@ -180,7 +188,7 @@ function launchQuestBattle(qid){
   const dialog = (window.BATTLE.QUEST_DIALOG && window.BATTLE.QUEST_DIALOG[qid]) || window.BATTLE.GENERIC_DIALOG;
   const prof = profileOf(ME); stopMusic();
   const hasMythic = prof.inventory.includes(window.BATTLE.MYTHIC_BY_CLASS[battleClass()]);
-  window.ForgeBattle.start({ classId: battleClass(), questIndex: idx, equipped: prof.equipped, dialog, hasMythic,
+  window.ForgeBattle.start({ classId: battleClass(), questIndex: idx, equipped: prof.equipped, levels: prof.levels, dialog, hasMythic,
     onWin: async (res)=>{                                // persist loot so it's equippable on the victory screen
       const d = await fetch('/api/battle/win',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({crewId:ME,questId:qid,xp:res.xp,loot:res.loot})}).then(r=>r.json());
@@ -192,7 +200,7 @@ function launchQuestBattle(qid){
 }
 let pendingBattleResume=null;
 function openInventoryOverlay(resume){ pendingBattleResume = resume || null; renderGear(); $('#gear-modal').classList.remove('hidden'); }
-function closeGear(){ $('#gear-modal').classList.add('hidden'); if(pendingBattleResume){ const r=pendingBattleResume; pendingBattleResume=null; r(profileOf(ME).equipped); } }
+function closeGear(){ $('#gear-modal').classList.add('hidden'); if(pendingBattleResume){ const r=pendingBattleResume; pendingBattleResume=null; r(profileOf(ME).equipped, profileOf(ME).levels); } }
 
 function wireChrome(){
   $('#btn-gm').onclick = ()=>{ initAudio(); loginGM(); };

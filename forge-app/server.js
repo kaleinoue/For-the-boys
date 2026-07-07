@@ -56,7 +56,7 @@ function rankFor(xp) { let r = RANKS[0]; for (const rank of RANKS) if (xp >= ran
 function emptyState() { const s = { crew: {} }; for (const c of CREW) s.crew[c.id] = { xp: 0, steps: {} }; return s; }
 // sum step xp, skipping the special __profile key (character/inventory data)
 function recomputeXp(m) { m.xp = Object.entries(m.steps).reduce((sum, [k, v]) => sum + (k.startsWith('__') ? 0 : (v.xp || 0)), 0); return m.xp; }
-function getProfile(m) { const p = (m.steps.__profile ||= { inventory: [], equipped: {}, battles: {}, gold: 0 }); p.inventory ||= []; p.equipped ||= {}; p.battles ||= {}; p.gold ??= 0; return p; }
+function getProfile(m) { const p = (m.steps.__profile ||= { inventory: [], equipped: {}, battles: {}, gold: 0, levels: {} }); p.inventory ||= []; p.equipped ||= {}; p.battles ||= {}; p.gold ??= 0; p.levels ||= {}; return p; }
 
 // campaign structure WITHOUT rubrics (safe to send to the browser)
 function publicQuests() {
@@ -310,19 +310,33 @@ const server = http.createServer(async (req, res) => {
       const { crewId, itemId } = await readBody(req);
       const state = await store.getAll(); const m = state.crew[crewId];
       if (!m) return sendJson(res, 400, { error: 'Unknown crew member.' });
-      const r = GEARDATA.UPGRADE[itemId];
-      if (!r) return sendJson(res, 400, { error: 'That item cannot be upgraded.' });
-      const prof = getProfile(m);
-      const have = prof.inventory.filter(x => x === itemId).length;
-      if (have < r.need) return sendJson(res, 400, { error: `Need ${r.need}× (you have ${have}).` });
-      if ((prof.gold || 0) < r.gold) return sendJson(res, 400, { error: `Need ${r.gold} gold (you have ${prof.gold || 0}).` });
-      let removed = 0;
-      prof.inventory = prof.inventory.filter(x => { if (x === itemId && removed < r.need) { removed++; return false; } return true; });
-      if (!prof.inventory.includes(itemId)) for (const s in prof.equipped) if (prof.equipped[s] === itemId) delete prof.equipped[s];
-      prof.gold -= r.gold;
-      prof.inventory.push(r.to);
-      await store.putMember(crewId, m);
-      return sendJson(res, 200, { ok: true, made: r.to, gold: prof.gold, state: decorate(state) });
+      const prof = getProfile(m); const g = GEARDATA.GEAR[itemId]; const r = GEARDATA.UPGRADE[itemId];
+      if (r) {                                                   // tier upgrade (Common/Rare -> next tier)
+        const have = prof.inventory.filter(x => x === itemId).length;
+        if (have < r.need) return sendJson(res, 400, { error: `Need ${r.need}× (you have ${have}).` });
+        if ((prof.gold || 0) < r.gold) return sendJson(res, 400, { error: `Need ${r.gold} gold (you have ${prof.gold || 0}).` });
+        let removed = 0;
+        prof.inventory = prof.inventory.filter(x => { if (x === itemId && removed < r.need) { removed++; return false; } return true; });
+        if (!prof.inventory.includes(itemId)) for (const s in prof.equipped) if (prof.equipped[s] === itemId) delete prof.equipped[s];
+        prof.gold -= r.gold; prof.inventory.push(r.to);
+        await store.putMember(crewId, m);
+        return sendJson(res, 200, { ok: true, made: r.to, gold: prof.gold, state: decorate(state) });
+      }
+      if (g && g.tier === 'Legendary') {                         // level up a Legendary (stronger, same item)
+        if (!prof.inventory.includes(itemId)) return sendJson(res, 400, { error: "You don't own that." });
+        const level = prof.levels[itemId] || 0;
+        if (level >= GEARDATA.LEG_MAX_LEVEL) return sendJson(res, 400, { error: 'Already at max level.' });
+        const fodder = GEARDATA.RARE_OF_SLOT[g.slot], need = GEARDATA.LEG_FODDER_NEED, cost = GEARDATA.legLevelGold(level);
+        const have = prof.inventory.filter(x => x === fodder).length;
+        if (have < need) return sendJson(res, 400, { error: `Need ${need}× ${GEARDATA.GEAR[fodder].name} (you have ${have}).` });
+        if ((prof.gold || 0) < cost) return sendJson(res, 400, { error: `Need ${cost} gold (you have ${prof.gold || 0}).` });
+        let removed = 0;
+        prof.inventory = prof.inventory.filter(x => { if (x === fodder && removed < need) { removed++; return false; } return true; });
+        prof.gold -= cost; prof.levels[itemId] = level + 1;
+        await store.putMember(crewId, m);
+        return sendJson(res, 200, { ok: true, leveled: itemId, level: level + 1, gold: prof.gold, state: decorate(state) });
+      }
+      return sendJson(res, 400, { error: 'That item cannot be upgraded.' });
     }
     if (req.method === 'GET' && url === '/api/admin/health') {
       const code = new URL(req.url, 'http://x').searchParams.get('code');
