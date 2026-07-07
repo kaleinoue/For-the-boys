@@ -174,6 +174,9 @@ img{image-rendering:pixelated}
 .g-nm{font-family:var(--font-retro);font-size:1.4rem}
 .g-meta{font-family:var(--font-retro);font-size:1rem;color:var(--muted)}
 .g-xp{margin-left:auto;font-family:var(--font-pixel);font-size:.7rem;color:var(--ember2)}
+.gxp-edit{display:flex;gap:.4rem;width:100%;margin-top:.4rem}
+.gxp-edit input{flex:1;font-family:var(--font-retro);font-size:1.2rem;background:#0f0f18;color:var(--ink);border:2px solid var(--line);border-radius:8px;padding:.2rem .5rem}
+.gxp-edit .pixel-btn{font-size:.55rem}
 
 /* ================= CHARACTER / INVENTORY ================= */
 .gear-card .sub{font-family:var(--font-pixel);font-size:.62rem;color:var(--ember2);margin:1rem 0 .5rem}

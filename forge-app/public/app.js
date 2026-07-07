@@ -130,6 +130,12 @@ async function scrap(id){
   if(d.error){ alert(d.error); return; }
   STATE=d.state; sfx('click'); toast(`♻ +${d.value} gold (${d.gold} total)`); renderGear(); renderHUD();
 }
+async function setXp(id, val){
+  const d=await fetch('/api/admin/setxp',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({code:GM_CODE,crewId:id,xp:val})}).then(r=>r.json());
+  if(d.error){ alert(d.error); return; }
+  STATE=d.state; sfx('click'); toast(`Set ${crewById(id).name} to ${d.xp} XP`); renderGuild(); renderHUD(); renderMap();
+}
 async function equip(slot,itemId){
   const d=await fetch('/api/profile/equip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({crewId:ME,slot,itemId})}).then(r=>r.json());
   if(d.error){ alert(d.error); return; }
@@ -337,6 +343,12 @@ function renderGuild(){
       <div><div class="g-nm acc-${c.id}" style="color:var(--accent)">${c.name}</div>
         <div class="g-meta">${m.rank.emoji} ${m.rank.name} · ${passed}/17 trials</div></div>
       <div class="g-xp">${m.xp} XP</div>`;
+    if(isGod()){                                   // GM: edit this hero's XP
+      const ed=document.createElement('div'); ed.className='gxp-edit';
+      ed.innerHTML=`<input type="number" min="0" value="${m.xp}" aria-label="set XP" /><button class="pixel-btn ghost">set XP</button>`;
+      ed.querySelector('button').onclick=()=>setXp(c.id, ed.querySelector('input').value);
+      row.appendChild(ed);
+    }
     list.appendChild(row);
   });
 }

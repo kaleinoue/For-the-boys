@@ -293,6 +293,19 @@ const server = http.createServer(async (req, res) => {
       await store.putMember(crewId, m);
       return sendJson(res, 200, { ok: true, value, gold: prof.gold, state: decorate(state) });
     }
+    if (req.method === 'POST' && url === '/api/admin/setxp') {
+      const { code, crewId, xp } = await readBody(req);
+      if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
+      const state = await store.getAll(); const m = state.crew[crewId];
+      if (!m) return sendJson(res, 400, { error: 'Unknown crew member.' });
+      const target = Math.max(0, Math.min(100000, Math.round(+xp || 0)));
+      // XP is derived from step xp; a "gm:xp" step holds the admin adjustment.
+      const base = Object.entries(m.steps).reduce((s, [k, v]) => s + ((k.startsWith('__') || k === 'gm:xp') ? 0 : (v.xp || 0)), 0);
+      const delta = target - base;
+      if (delta !== 0) m.steps['gm:xp'] = { xp: delta, at: Date.now() }; else delete m.steps['gm:xp'];
+      recomputeXp(m); await store.putMember(crewId, m);
+      return sendJson(res, 200, { ok: true, xp: m.xp, state: decorate(state) });
+    }
     if (req.method === 'GET' && url === '/api/admin/health') {
       const code = new URL(req.url, 'http://x').searchParams.get('code');
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
