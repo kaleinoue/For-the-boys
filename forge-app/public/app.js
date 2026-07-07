@@ -106,11 +106,15 @@ function renderGear(){
     return `<div class="slot"><span class="slot-name">${s}</span>${g?`<button class="item on" data-uneq="${s}" style="border-color:${TC[g.tier]};color:${TC[g.tier]}">${g.name} ✕</button>`:`<span class="empty">— empty —</span>`}</div>`; }).join('');
   // inventory grouped by id with counts, excluding equipped
   const counts={}; prof.inventory.forEach(id=>counts[id]=(counts[id]||0)+1);
+  const rawCounts={...counts};                          // all copies (incl equipped) — for upgrade checks
   Object.values(prof.equipped).forEach(id=>{ if(counts[id]) counts[id]--; });
   const order=['Mythic','Legendary','Rare','Common'];
   const invHtml = Object.entries(counts).filter(([id,n])=>n>0&&G[id]).sort((a,b)=>order.indexOf(G[a[0]].tier)-order.indexOf(G[b[0]].tier))
     .map(([id,n])=>{ const g=G[id]; const locked=g.klass&&g.klass!==ME; const mods=Object.entries(g.mods).map(([k,v])=>`${k}+${v}`).join(' '); const sv=window.BATTLE.SCRAP_VALUE[g.tier];
-      return `<div class="invrow"><button class="item" ${locked?'disabled':`data-eq="${id}" data-slot="${g.slot}"`} style="border-color:${TC[g.tier]};color:${TC[g.tier]}">${g.name}${n>1?` ×${n}`:''} <small>[${g.slot} · ${mods}]</small>${locked?' 🔒':''}</button>${sv?`<button class="scrap" data-scrap="${id}" title="scrap for gold">♻ ${sv}g</button>`:''}</div>`; }).join('') || '<div class="empty">No gear yet — win battles to loot some.</div>';
+      const up=window.BATTLE.UPGRADE[id];
+      const canUp = up && (rawCounts[id]>=up.need) && ((prof.gold||0)>=up.gold);
+      const upBtn = up?`<button class="upg" data-upg="${id}" ${canUp?'':'disabled'} title="combine ${up.need}× + ${up.gold}g → ${G[up.to].name}">⬆ ${up.need}×+${up.gold}g</button>`:'';
+      return `<div class="invrow"><button class="item" ${locked?'disabled':`data-eq="${id}" data-slot="${g.slot}"`} style="border-color:${TC[g.tier]};color:${TC[g.tier]}">${g.name}${n>1?` ×${n}`:''} <small>[${g.slot} · ${mods}]</small>${locked?' 🔒':''}</button>${upBtn}${sv?`<button class="scrap" data-scrap="${id}" title="scrap for gold">♻ ${sv}g</button>`:''}</div>`; }).join('') || '<div class="empty">No gear yet — win battles to loot some.</div>';
   $('#gear-body').innerHTML = `
     <div class="statgrid">
       <div>❤ Health <b>${st.hp}</b></div><div>⚔ Attack <b>${st.atk}</b></div>
@@ -118,10 +122,18 @@ function renderGear(){
     </div>
     <div class="goldline">💰 <b>${prof.gold||0}</b> gold</div>
     <h3 class="sub">Equipped</h3>${slotHtml}
-    <h3 class="sub">Inventory <small>(tap gear to equip · ♻ to scrap for gold)</small></h3><div class="invlist">${invHtml}</div>`;
+    <h3 class="sub">Inventory <small>(tap gear to equip · ⬆ combine · ♻ scrap)</small></h3><div class="invlist">${invHtml}</div>`;
   $('#gear-body').querySelectorAll('[data-eq]').forEach(b=>b.onclick=()=>equip(b.dataset.slot,b.dataset.eq));
   $('#gear-body').querySelectorAll('[data-uneq]').forEach(b=>b.onclick=()=>equip(b.dataset.uneq,null));
   $('#gear-body').querySelectorAll('[data-scrap]').forEach(b=>b.onclick=()=>scrap(b.dataset.scrap));
+  $('#gear-body').querySelectorAll('[data-upg]').forEach(b=>b.onclick=()=>upgrade(b.dataset.upg));
+}
+async function upgrade(id){
+  const G=window.BATTLE.GEAR, r=window.BATTLE.UPGRADE[id];
+  if(!confirm(`Combine ${r.need}× ${G[id].name} + ${r.gold} gold into ${G[r.to].name}?`)) return;
+  const d=await fetch('/api/profile/upgrade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({crewId:ME,itemId:id})}).then(x=>x.json());
+  if(d.error){ alert(d.error); return; }
+  STATE=d.state; sfx('crit'); toast(`⬆ Forged ${G[r.to].name}!`); renderGear(); renderHUD();
 }
 async function scrap(id){
   const g=window.BATTLE.GEAR[id];

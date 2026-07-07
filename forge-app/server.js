@@ -306,6 +306,24 @@ const server = http.createServer(async (req, res) => {
       recomputeXp(m); await store.putMember(crewId, m);
       return sendJson(res, 200, { ok: true, xp: m.xp, state: decorate(state) });
     }
+    if (req.method === 'POST' && url === '/api/profile/upgrade') {
+      const { crewId, itemId } = await readBody(req);
+      const state = await store.getAll(); const m = state.crew[crewId];
+      if (!m) return sendJson(res, 400, { error: 'Unknown crew member.' });
+      const r = GEARDATA.UPGRADE[itemId];
+      if (!r) return sendJson(res, 400, { error: 'That item cannot be upgraded.' });
+      const prof = getProfile(m);
+      const have = prof.inventory.filter(x => x === itemId).length;
+      if (have < r.need) return sendJson(res, 400, { error: `Need ${r.need}× (you have ${have}).` });
+      if ((prof.gold || 0) < r.gold) return sendJson(res, 400, { error: `Need ${r.gold} gold (you have ${prof.gold || 0}).` });
+      let removed = 0;
+      prof.inventory = prof.inventory.filter(x => { if (x === itemId && removed < r.need) { removed++; return false; } return true; });
+      if (!prof.inventory.includes(itemId)) for (const s in prof.equipped) if (prof.equipped[s] === itemId) delete prof.equipped[s];
+      prof.gold -= r.gold;
+      prof.inventory.push(r.to);
+      await store.putMember(crewId, m);
+      return sendJson(res, 200, { ok: true, made: r.to, gold: prof.gold, state: decorate(state) });
+    }
     if (req.method === 'GET' && url === '/api/admin/health') {
       const code = new URL(req.url, 'http://x').searchParams.get('code');
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });

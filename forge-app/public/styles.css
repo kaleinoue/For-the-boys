@@ -194,6 +194,10 @@ img{image-rendering:pixelated}
 .scrap{font-family:var(--font-retro);font-size:1.05rem;background:#231a0a;border:2px solid #7a5c1a;color:#ffd15c;
   border-radius:9px;padding:0 .6rem;white-space:nowrap}
 .scrap:hover{border-color:var(--gold);color:#fff}
+.upg{font-family:var(--font-retro);font-size:1.05rem;background:#0a1e23;border:2px solid #1a7a6a;color:#5eead4;
+  border-radius:9px;padding:0 .6rem;white-space:nowrap}
+.upg:hover:not([disabled]){border-color:#5eead4;color:#fff}
+.upg[disabled]{opacity:.4}
 .item{text-align:left;font-family:var(--font-retro);font-size:1.25rem;background:#00000030;border:2px solid var(--line);
   border-radius:9px;padding:.5rem .7rem;color:var(--ink)}
 .item small{color:var(--muted);font-size:.95rem}
