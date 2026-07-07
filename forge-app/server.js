@@ -255,7 +255,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (questId != null && !prof.battles[questId]) {           // XP once per battle; loot every time
         prof.battles[questId] = true;
-        m.steps['battle:' + questId] = { xp: Math.max(0, Math.min(2000, +xp || 0)), at: Date.now(), cleared: true };
+        m.steps['battle:' + questId] = { xp: Math.max(0, Math.round(+xp || 0)), at: Date.now(), cleared: true };
       }
       recomputeXp(m); await store.putMember(crewId, m);
       return sendJson(res, 200, { ok: true, gained: items, state: decorate(state) });
@@ -298,13 +298,30 @@ const server = http.createServer(async (req, res) => {
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
       const state = await store.getAll(); const m = state.crew[crewId];
       if (!m) return sendJson(res, 400, { error: 'Unknown crew member.' });
-      const target = Math.max(0, Math.min(100000, Math.round(+xp || 0)));
+      const target = Math.max(0, Math.round(+xp || 0));           // no XP cap
       // XP is derived from step xp; a "gm:xp" step holds the admin adjustment.
       const base = Object.entries(m.steps).reduce((s, [k, v]) => s + ((k.startsWith('__') || k === 'gm:xp') ? 0 : (v.xp || 0)), 0);
       const delta = target - base;
       if (delta !== 0) m.steps['gm:xp'] = { xp: delta, at: Date.now() }; else delete m.steps['gm:xp'];
       recomputeXp(m); await store.putMember(crewId, m);
       return sendJson(res, 200, { ok: true, xp: m.xp, state: decorate(state) });
+    }
+    if (req.method === 'POST' && url === '/api/profile/sellall') {
+      const { crewId } = await readBody(req);
+      const state = await store.getAll(); const m = state.crew[crewId];
+      if (!m) return sendJson(res, 400, { error: 'Unknown crew member.' });
+      const prof = getProfile(m);
+      const keep = {}; for (const id of Object.values(prof.equipped)) keep[id] = (keep[id] || 0) + 1;  // keep equipped copies
+      let gained = 0, sold = 0; const seen = {}, newInv = [];
+      for (const id of prof.inventory) {
+        const g = GEARDATA.GEAR[id]; seen[id] = (seen[id] || 0) + 1;
+        const keepN = g.tier === 'Mythic' ? Infinity : (keep[id] || 0);   // never sell Mythics or equipped
+        if (seen[id] <= keepN) { newInv.push(id); }
+        else { gained += GEARDATA.SCRAP_VALUE[g.tier] || 0; sold++; }
+      }
+      prof.inventory = newInv; prof.gold = (prof.gold || 0) + gained;
+      await store.putMember(crewId, m);
+      return sendJson(res, 200, { ok: true, sold, gained, gold: prof.gold, state: decorate(state) });
     }
     if (req.method === 'POST' && url === '/api/profile/upgrade') {
       const { crewId, itemId } = await readBody(req);

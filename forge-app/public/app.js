@@ -126,13 +126,20 @@ function renderGear(){
       <div>❤ Health <b>${st.hp}</b></div><div>⚔ Attack <b>${st.atk}</b></div>
       <div>🛡 Armor <b>${st.armor}</b></div><div>👟 Speed <b>${st.speed}</b></div>
     </div>
-    <div class="goldline">💰 <b>${prof.gold||0}</b> gold</div>
+    <div class="goldline">💰 <b>${prof.gold||0}</b> gold <button id="sell-all" class="pixel-btn ghost">Sell all junk</button></div>
     <h3 class="sub">Equipped</h3>${slotHtml}
     <h3 class="sub">Inventory <small>(tap gear to equip · ⬆ combine · ♻ scrap)</small></h3><div class="invlist">${invHtml}</div>`;
   $('#gear-body').querySelectorAll('[data-eq]').forEach(b=>b.onclick=()=>equip(b.dataset.slot,b.dataset.eq));
   $('#gear-body').querySelectorAll('[data-uneq]').forEach(b=>b.onclick=()=>equip(b.dataset.uneq,null));
   $('#gear-body').querySelectorAll('[data-scrap]').forEach(b=>b.onclick=()=>scrap(b.dataset.scrap));
   $('#gear-body').querySelectorAll('[data-upg]').forEach(b=>b.onclick=()=>upgrade(b.dataset.upg));
+  $('#sell-all').onclick=sellAll;
+}
+async function sellAll(){
+  if(!confirm('Sell ALL unequipped, non-Mythic gear for gold? (keeps equipped gear and Mythics)')) return;
+  const d=await fetch('/api/profile/sellall',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({crewId:ME})}).then(r=>r.json());
+  if(d.error){ alert(d.error); return; }
+  STATE=d.state; sfx('click'); toast(d.sold?`♻ Sold ${d.sold} for ${d.gained} gold`:'Nothing to sell'); renderGear(); renderHUD();
 }
 async function upgrade(id){
   const B=window.BATTLE, G=B.GEAR, g=G[id]; let msg;
