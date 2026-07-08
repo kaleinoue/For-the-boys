@@ -204,7 +204,7 @@
       // enemies — after RAGE_START the horde grows frenzied: faster travel, attack speed, and range.
       elapsed += dt;
       if (!raged && elapsed >= RAGE_START) { raged = true; flash('THE HORDE GROWS FRENZIED!', '#ff5d5d'); bSfx('boss'); }
-      const esc = 1 + Math.min(2, Math.max(0, elapsed - RAGE_START) / 90);   // 1x → up to 3x, ramping every 90s past 3:00
+      const esc = 1 + Math.max(0, elapsed - RAGE_START) / 90;   // 1x, then climbs uncapped every 90s past 3:00
       for (const e of enemies) {
         e.hitCd -= dt;
         const d = dist(e, player), dx = (player.x - e.x) / (d || 1), dy = (player.y - e.y) / (d || 1);
@@ -434,7 +434,7 @@
     function cleanup() { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); root.classList.remove('on'); root.innerHTML = ''; }
 
     // debug hook (handy for testing; harmless)
-    window.__forgeBattle = () => ({ enemies: enemies.length, state, hearts: player.hearts, maxHearts: player.maxHearts, wave: waveIdx, boss: bossActive, loot: runLoot.length, px: player.x, py: player.y, elapsed, esc: 1 + Math.min(2, Math.max(0, elapsed - RAGE_START) / 90), elist: enemies.map(e => ({ x: e.x, y: e.y, ai: e.ai, boss: e.ai === 'boss' })), specials: boss ? boss.specials.length : 0, pProjs: projs.filter(p => p.team === 'player').length });
+    window.__forgeBattle = () => ({ enemies: enemies.length, state, hearts: player.hearts, maxHearts: player.maxHearts, wave: waveIdx, boss: bossActive, loot: runLoot.length, px: player.x, py: player.y, elapsed, esc: 1 + Math.max(0, elapsed - RAGE_START) / 90, elist: enemies.map(e => ({ x: e.x, y: e.y, ai: e.ai, boss: e.ai === 'boss' })), specials: boss ? boss.specials.length : 0, pProjs: projs.filter(p => p.team === 'player').length });
 
     // intro dialog, then first wave
     showDialog([dialog[0] || 'Ready your weapon.'], startNextWave);
