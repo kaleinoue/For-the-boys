@@ -80,6 +80,8 @@
     player.hearts = player.maxHearts;
     let enemies = [], projs = [], loot = [], fx = [];
     let waveIdx = -1, bossActive = false, boss = null, state = 'dialog', dlgQueue = [], runLoot = [], last = 0, raf = 0, aliveFrames = 0, paused = false, shake = 0;
+    let elapsed = 0, raged = false;   // active-fight seconds; after RAGE_START the horde escalates (speed/attack/range)
+    const RAGE_START = 180;
 
     // open inventory mid-battle (pauses); resume recomputes stats from new gear
     function openInv() { if (paused || (state !== 'fight' && state !== 'dialog') || !opts.onInventory) return; paused = true; opts.onInventory(resumeFromInv); }
@@ -199,24 +201,38 @@
       if (press.atk && player.atkCd <= 0) { doAttack(); player.atkCd = cls.cd; }
       press.atk = false;
 
-      // enemies
+      // enemies — after RAGE_START the horde grows frenzied: faster travel, attack speed, and range.
+      elapsed += dt;
+      if (!raged && elapsed >= RAGE_START) { raged = true; flash('THE HORDE GROWS FRENZIED!', '#ff5d5d'); bSfx('boss'); }
+      const esc = 1 + Math.min(2, Math.max(0, elapsed - RAGE_START) / 90);   // 1x → up to 3x, ramping every 90s past 3:00
       for (const e of enemies) {
         e.hitCd -= dt;
         const d = dist(e, player), dx = (player.x - e.x) / (d || 1), dy = (player.y - e.y) / (d || 1);
         if (e.ai === 'boss') { bossUpdate(e, dt, dx, dy, d); }
-        else if (e.ai === 'shooter') {                       // keep range + coordinate spacing, fire faster at higher levels
-          const want = 220; const dir = d > want ? 1 : d < want - 40 ? -1 : 0;
+        else if (e.ai === 'shooter') {                       // keep range + coordinate spacing; frenzy adds range + fire rate
+          const want = 210 + 70 * (esc - 1); const dir = d > want ? 1 : d < want - 40 ? -1 : 0;
           let sx = 0, sy = 0; for (const o of enemies) { if (o === e || o.ai === 'boss') continue; const dd = dist(o, e); if (dd > 0 && dd < 44) { sx += (e.x - o.x) / dd; sy += (e.y - o.y) / dd; } }
-          e.x += (dx * dir + sx * plan.coord * 0.8) * e.speed * dt; e.y += (dy * dir + sy * plan.coord * 0.8) * e.speed * dt;
-          e.shotCd -= dt; if (e.shotCd <= 0) { e.shotCd = (B.ENEMIES[e.type] ? B.ENEMIES[e.type].shotCd : 1.8) * (1 - plan.coord * 0.35); fireEnemyShot(e, dx, dy, 0); }
-        } else {                                              // chaser: encircle + separate (coordination rises with level)
+          e.x += (dx * dir + sx * plan.coord * 0.8) * e.speed * esc * dt; e.y += (dy * dir + sy * plan.coord * 0.8) * e.speed * esc * dt;
+          e.shotCd -= dt; if (e.shotCd <= 0) { e.shotCd = (B.ENEMIES[e.type] ? B.ENEMIES[e.type].shotCd : 1.8) * (1 - plan.coord * 0.35) / esc; fireEnemyShot(e, dx, dy, 0, esc); }
+        } else {                                              // melee: surround the player AND screen/protect ranged allies
           const c = plan.coord; let mvx = dx, mvy = dy;
-          mvx += -dy * c * 0.7 * e.flankDir; mvy += dx * c * 0.7 * e.flankDir;   // tangential = surround
+          let guard = null, gd = 1e9;                         // nearest ranged ally to escort
+          for (const o of enemies) { if (o.ai !== 'shooter') continue; const od = dist(o, e); if (od < gd) { gd = od; guard = o; } }
+          if (guard) {
+            const pgx = player.x - guard.x, pgy = player.y - guard.y, pgd = Math.hypot(pgx, pgy) || 1;
+            const tx = guard.x + pgx / pgd * 64, ty = guard.y + pgy / pgd * 64;   // stand between the player and the shooter
+            const gix = tx - e.x, giy = ty - e.y, gid = Math.hypot(gix, giy) || 1;
+            const protect = 0.5 + 0.4 * c;                    // how hard they commit to guarding (rises with coordination)
+            mvx = dx * (1 - protect) + gix / gid * protect; mvy = dy * (1 - protect) + giy / gid * protect;
+            mvx += -(e.y - guard.y) / (gd || 1) * 0.4 * e.flankDir; mvy += (e.x - guard.x) / (gd || 1) * 0.4 * e.flankDir;  // ring the shooter = surround
+          } else {
+            mvx += -dy * c * 0.7 * e.flankDir; mvy += dx * c * 0.7 * e.flankDir;   // no one to guard: encircle the player
+          }
           for (const o of enemies) { if (o === e || o.ai === 'boss') continue; const dd = dist(o, e); if (dd > 0 && dd < 40) { mvx += (e.x - o.x) / dd * c * 1.2; mvy += (e.y - o.y) / dd * c * 1.2; } }
-          const mm = Math.hypot(mvx, mvy) || 1; e.x += mvx / mm * e.speed * dt; e.y += mvy / mm * e.speed * dt;
+          const mm = Math.hypot(mvx, mvy) || 1; e.x += mvx / mm * e.speed * esc * dt; e.y += mvy / mm * e.speed * esc * dt;
         }
         e.x = clamp(e.x, 12, W - 12); e.y = clamp(e.y, 46, H - 12);
-        if (d < e.r + player.r && e.hitCd <= 0) { hurtPlayer(e.atk, e.x, e.y); e.hitCd = 0.8; }
+        if (d < e.r + player.r && e.hitCd <= 0) { hurtPlayer(e.atk, e.x, e.y); e.hitCd = 0.8 / esc; }   // frenzy = faster melee swings
       }
       if (boss) bossFill.style.width = clamp(boss.hp / boss.max * 100, 0, 100) + '%';
 
@@ -266,7 +282,7 @@
         fx.push({ t: 'slash', x: player.x, y: player.y, a: fa, reach: cls.reach, arc: cls.arc, life: .18, color: cls.accent });
       }
     }
-    function fireEnemyShot(e, dx, dy, spread) { const a = Math.atan2(dy, dx) + spread; projs.push({ x: e.x, y: e.y, vx: Math.cos(a) * (e.shotSpd || 180), vy: Math.sin(a) * (e.shotSpd || 180), life: 3, dmg: e.atk, team: 'enemy', color: '#ff88aa' }); }
+    function fireEnemyShot(e, dx, dy, spread, mult) { const m = mult || 1; const a = Math.atan2(dy, dx) + spread; const sp = (e.shotSpd || 180) * m; projs.push({ x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 3 * m, dmg: e.atk, team: 'enemy', color: '#ff88aa' }); }   // mult (frenzy) scales speed AND lifetime = more range
     function mkEShot(e, ux, uy) { projs.push({ x: e.x, y: e.y, vx: ux * (e.shotSpd || 200), vy: uy * (e.shotSpd || 200), life: 3.2, dmg: e.atk, team: 'enemy', color: '#ff88aa' }); }
     // Boss AI: cycles 3 core patterns + fires a random "special" (one more per difficulty level).
     function bossUpdate(e, dt, dx, dy, d) {
@@ -418,7 +434,7 @@
     function cleanup() { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); root.classList.remove('on'); root.innerHTML = ''; }
 
     // debug hook (handy for testing; harmless)
-    window.__forgeBattle = () => ({ enemies: enemies.length, state, hearts: player.hearts, maxHearts: player.maxHearts, wave: waveIdx, boss: bossActive, loot: runLoot.length, px: player.x, py: player.y, elist: enemies.map(e => ({ x: e.x, y: e.y, boss: e.ai === 'boss' })), specials: boss ? boss.specials.length : 0, pProjs: projs.filter(p => p.team === 'player').length });
+    window.__forgeBattle = () => ({ enemies: enemies.length, state, hearts: player.hearts, maxHearts: player.maxHearts, wave: waveIdx, boss: bossActive, loot: runLoot.length, px: player.x, py: player.y, elapsed, esc: 1 + Math.min(2, Math.max(0, elapsed - RAGE_START) / 90), elist: enemies.map(e => ({ x: e.x, y: e.y, ai: e.ai, boss: e.ai === 'boss' })), specials: boss ? boss.specials.length : 0, pProjs: projs.filter(p => p.team === 'player').length });
 
     // intro dialog, then first wave
     showDialog([dialog[0] || 'Ready your weapon.'], startNextWave);
