@@ -228,7 +228,7 @@
       projs = projs.filter(p => p.life > 0 && p.x > -20 && p.x < W + 20 && p.y > -20 && p.y < H + 20);
 
       // loot pickups
-      for (const l of loot) { if (dist(l, player) < player.r + l.r + 6) { grab(l); l.dead = true; } }
+      for (const l of loot) { if (dist(l, player) < player.r + l.r + 6) { if (grab(l) !== false) l.dead = true; } }
       loot = loot.filter(l => !l.dead);
 
       fx.forEach(f => f.life -= dt); fx = fx.filter(f => f.life > 0);
@@ -289,7 +289,7 @@
       bSfx('shot');
     }
     function grab(l) {
-      if (l.potion) { player.hearts = clamp(player.hearts + 1, 0, player.maxHearts); flash('+1 ❤', '#5cff9d'); bSfx('heal'); return; }
+      if (l.potion) { if (player.hearts >= player.maxHearts) return false; player.hearts = clamp(player.hearts + 1, 0, player.maxHearts); flash('+1 ❤', '#5cff9d'); bSfx('heal'); return; }
       runLoot.push(l.id); flash(B.GEAR[l.id].name + '!', B.TIER_COLOR[l.tier]); bSfx('pickup'); }
     function flash(text, color) { toast.textContent = text; toast.style.borderColor = color; toast.style.color = color; toast.classList.remove('on'); void toast.offsetWidth; toast.classList.add('on'); }
 
@@ -378,6 +378,8 @@
     // ---- end states ----
     async function win() {
       state = 'won'; teardownInput(); bSfx('win');
+      for (const l of loot) { if (l.id) runLoot.push(l.id); }   // auto-collect any gear still on the field
+      loot = [];
       const items = [...runLoot];
       overH2.textContent = 'VICTORY!'; overlay.classList.remove('lose');
       lootEl.innerHTML = items.length ? items.map(id => { const g = B.GEAR[id]; return `<div class="item" style="border-color:${B.TIER_COLOR[g.tier]};color:${B.TIER_COLOR[g.tier]}">${g.tier} · ${g.name}</div>`; }).join('') : '<div class="item">No gear this time — the trial still awaits.</div>';

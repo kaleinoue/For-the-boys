@@ -326,6 +326,12 @@ function renderStep(step){
   const ta=el.querySelector('textarea'), btn=el.querySelector('.submit'), slot=el.querySelector('.grade-slot');
   if(prev) slot.appendChild(gradeCard(prev));
 
+  // Persist written answers locally so you can reopen a lesson and pick up where you left off,
+  // even if you never submitted. A saved local draft wins over the last graded response.
+  const dkey = `forge_draft_${ME}_${step.id}`;
+  try{ const draft = localStorage.getItem(dkey); if(draft!=null && draft!=='') ta.value = draft; }catch{}
+  ta.addEventListener('input', ()=>{ try{ localStorage.setItem(dkey, ta.value); }catch{} });
+
   if(isGod()){
     el.querySelector('.gm-force').onclick = async ()=>{
       const data = await fetch('/api/admin/force',{method:'POST',headers:{'Content-Type':'application/json'},

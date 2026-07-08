@@ -381,6 +381,10 @@ const server = http.createServer(async (req, res) => {
         member.steps[stepId] = { passed: result.passed, score: result.score, xp: awarded, response, feedback: result.feedback, tip: result.tip, at: Date.now() };
         recomputeXp(member);
         await store.putMember(crewId, member);
+      } else if (prev.response !== response) {
+        // Keep the better score/XP, but remember the student's latest writing so it persists.
+        member.steps[stepId] = { ...prev, response };
+        await store.putMember(crewId, member);
       }
       return sendJson(res, 200, {
         result: { ...result, xpAwarded: keepBest ? prev.xp : awarded, alreadyBetter: keepBest },
