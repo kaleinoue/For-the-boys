@@ -5,7 +5,7 @@
   --ink:#f2edff; --muted:#a79fc4;
   --ember:#ff6b1a; --ember2:#ffc24b; --gold:#ffd662;
   --good:#4ade80; --bad:#f87171; --mana:#5eb1ff;
-  --z:#ff5d5d; --l:#ffd15c; --j:#5cff9d; --y:#c88bff; /* class accents */
+  --z:#ff5d5d; --l:#ffd15c; --j:#5cff9d; --y:#c88bff; --v:#ff7bd5; /* class accents */
   --font-pixel:'Press Start 2P',system-ui,sans-serif;
   --font-retro:'VT323',ui-monospace,monospace;
   --font-body:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
@@ -69,7 +69,7 @@ img{image-rendering:pixelated}
 
 /* class accent hook */
 .acc-zeppelin{--accent:var(--z)} .acc-leo{--accent:var(--l)}
-.acc-jonah{--accent:var(--j)} .acc-jyana{--accent:var(--y)}
+.acc-jonah{--accent:var(--j)} .acc-jyana{--accent:var(--y)} .acc-via{--accent:var(--v)}
 
 /* ================= HUD ================= */
 .hud{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;

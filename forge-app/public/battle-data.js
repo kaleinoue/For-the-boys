@@ -10,6 +10,9 @@ const CLASSES = {
     base:{ hp:98,  atk:11, armor:3, speed:126 }, attack:'burst', reach:78,  cd:0.62, dodge:'dash' },
   jyana:    { name:'Jyana',    klass:'Engine',    color:'#c88bff', accent:'#e3c6ff',
     base:{ hp:70,  atk:7,  armor:2, speed:172 }, attack:'melee', reach:34, arc:2.4, cd:0.20, dodge:'dash' },
+  // Dual class: every swing is a melee arc AND a homing magic bolt. Can equip any gear (incl. other classes' Mythics).
+  via:      { name:'Princess Via', klass:'Spellblade', color:'#ff7bd5', accent:'#ffc2ec',
+    base:{ hp:104, atk:13, armor:4, speed:130 }, attack:'spellblade', reach:46, arc:1.7, cd:0.42, dodge:'dash' },
 };
 
 const ENEMIES = {
@@ -36,6 +39,7 @@ const GEAR = {
   myth_leo:     { name:"Bard's Resonator",        tier:'Mythic', slot:'weapon', klass:'leo',      mods:{ atk:20, speed:22, hp:28 } },
   myth_jonah:   { name:"Artificer's Prism",       tier:'Mythic', slot:'weapon', klass:'jonah',    mods:{ atk:16, hp:38, armor:6 } },
   myth_jyana:   { name:'Engine Core',             tier:'Mythic', slot:'weapon', klass:'jyana',    mods:{ atk:15, speed:38, hp:22 } },
+  myth_via:     { name:'Aria, the Spellblade',    tier:'Mythic', slot:'weapon', klass:'via',      mods:{ atk:17, speed:20, hp:34, armor:6 } },
 };
 
 const TIER_COLOR = { Common:'#c9d1d9', Rare:'#5eb1ff', Legendary:'#ffb020', Mythic:'#ff5df0' };
@@ -67,7 +71,7 @@ const legLevelGold = (level) => 300 * (level + 1);      // gold per level-up
 function itemMods(itemId, level) { const g = GEAR[itemId]; const f = 1 + (level || 0) * 0.20; const o = {}; for (const k in g.mods) o[k] = Math.round(g.mods[k] * f); return o; }
 
 const NORMAL_LOOT = { Common:['wood_sword','leather','charm'], Rare:['iron_sword','chainmail','swift_boots'], Legendary:['flame_blade','aegis','focus_amulet'] };
-const MYTHIC_BY_CLASS = { zeppelin:'myth_zeppelin', leo:'myth_leo', jonah:'myth_jonah', jyana:'myth_jyana' };
+const MYTHIC_BY_CLASS = { zeppelin:'myth_zeppelin', leo:'myth_leo', jonah:'myth_jonah', jyana:'myth_jyana', via:'myth_via' };
 
 // Difficulty by quest index / "level" (0..16).
 function battlePlan(questIndex) {

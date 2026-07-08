@@ -109,7 +109,7 @@ function renderGear(){
   Object.values(prof.equipped).forEach(id=>{ if(counts[id]) counts[id]--; });
   const order=['Mythic','Legendary','Rare','Common'];
   const invHtml = Object.entries(counts).filter(([id,n])=>n>0&&G[id]).sort((a,b)=>order.indexOf(G[a[0]].tier)-order.indexOf(G[b[0]].tier))
-    .map(([id,n])=>{ const B=window.BATTLE, g=G[id]; const locked=g.klass&&g.klass!==ME; const lvl=prof.levels[id]||0;
+    .map(([id,n])=>{ const B=window.BATTLE, g=G[id]; const locked=g.klass&&g.klass!==ME&&ME!=='via'; const lvl=prof.levels[id]||0;
       const mods=Object.entries(B.itemMods(id,lvl)).map(([k,v])=>`${k}+${v}`).join(' '); const sv=B.SCRAP_VALUE[g.tier];
       let upBtn=''; const tier=B.UPGRADE[id];
       if(tier){ const can=(rawCounts[id]>=tier.need)&&((prof.gold||0)>=tier.gold);

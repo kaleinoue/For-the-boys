@@ -251,6 +251,15 @@
       } else if (cls.attack === 'burst') {
         for (const e of [...enemies]) if (dist(e, player) < cls.reach) damageEnemy(e, stats.atk);
         fx.push({ t: 'burst', x: player.x, y: player.y, r: cls.reach, life: .25, color: cls.accent });
+      } else if (cls.attack === 'spellblade') {   // dual: melee arc up close + a homing magic bolt at range
+        const fa = Math.atan2(player.face.y, player.face.x);
+        for (const e of [...enemies]) { const d = dist(e, player); if (d > cls.reach + e.r) continue; const ea = Math.atan2(e.y - player.y, e.x - player.x); let diff = Math.abs(ea - fa); if (diff > Math.PI) diff = 2 * Math.PI - diff; if (diff < cls.arc / 2) damageEnemy(e, stats.atk); }
+        fx.push({ t: 'slash', x: player.x, y: player.y, a: fa, reach: cls.reach, arc: cls.arc, life: .18, color: cls.accent });
+        let tx = player.face.x, ty = player.face.y, near = null, nd = 1e9;   // magic bolt auto-aims nearest
+        for (const e of enemies) { const d = dist(e, player); if (d < nd) { nd = d; near = e; } }
+        if (near) { tx = (near.x - player.x) / (nd || 1); ty = (near.y - player.y) / (nd || 1); }
+        projs.push({ x: player.x, y: player.y, vx: tx * 460, vy: ty * 460, life: 1.5, dmg: Math.max(1, Math.round(stats.atk * 0.6)), team: 'player', color: cls.accent });
+        fx.push({ t: 'shot', x: player.x, y: player.y, life: .12 });
       } else { // melee arc
         const fa = Math.atan2(player.face.y, player.face.x);
         for (const e of [...enemies]) { const d = dist(e, player); if (d > cls.reach + e.r) continue; const ea = Math.atan2(e.y - player.y, e.x - player.x); let diff = Math.abs(ea - fa); if (diff > Math.PI) diff = 2 * Math.PI - diff; if (diff < cls.arc / 2) damageEnemy(e, stats.atk); }
@@ -409,7 +418,7 @@
     function cleanup() { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); root.classList.remove('on'); root.innerHTML = ''; }
 
     // debug hook (handy for testing; harmless)
-    window.__forgeBattle = () => ({ enemies: enemies.length, state, hearts: player.hearts, maxHearts: player.maxHearts, wave: waveIdx, boss: bossActive, loot: runLoot.length, px: player.x, py: player.y, elist: enemies.map(e => ({ x: e.x, y: e.y, boss: e.ai === 'boss' })), specials: boss ? boss.specials.length : 0 });
+    window.__forgeBattle = () => ({ enemies: enemies.length, state, hearts: player.hearts, maxHearts: player.maxHearts, wave: waveIdx, boss: bossActive, loot: runLoot.length, px: player.x, py: player.y, elist: enemies.map(e => ({ x: e.x, y: e.y, boss: e.ai === 'boss' })), specials: boss ? boss.specials.length : 0, pProjs: projs.filter(p => p.team === 'player').length });
 
     // intro dialog, then first wave
     showDialog([dialog[0] || 'Ready your weapon.'], startNextWave);

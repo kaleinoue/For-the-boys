@@ -269,7 +269,8 @@ const server = http.createServer(async (req, res) => {
         const g = GEARDATA.GEAR[itemId];
         if (!g) return sendJson(res, 400, { error: 'Unknown item.' });
         if (g.slot !== slot) return sendJson(res, 400, { error: 'Wrong slot.' });
-        if (g.klass && g.klass !== crewId) return sendJson(res, 403, { error: 'That Mythic belongs to another class.' });
+        // Princess Via is the Spellblade — she can wield any gear, including other classes' Mythics.
+        if (g.klass && g.klass !== crewId && crewId !== 'via') return sendJson(res, 403, { error: 'That Mythic belongs to another class.' });
         if (!prof.inventory.includes(itemId)) return sendJson(res, 400, { error: 'Not in inventory.' });
         prof.equipped[slot] = itemId;
       } else { delete prof.equipped[slot]; }
