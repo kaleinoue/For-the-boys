@@ -211,6 +211,20 @@ img{image-rendering:pixelated}
 .keybtn.await{background:var(--mana);color:#fff}
 #keys-reset{margin-top:1rem}
 
+/* ================= API KEY PANEL ================= */
+.apikey-steps{padding-left:1.3rem;margin:.2rem 0 1rem}
+.apikey-steps li{margin:.35rem 0}
+.apikey-row{display:flex;gap:.5rem;align-items:center;margin:.4rem 0}
+#apikey-input{flex:1;font-family:var(--font-retro);font-size:1.25rem;padding:.55rem .7rem;border-radius:8px;
+  border:2px solid var(--line);background:#0d0b16;color:#f2edff;letter-spacing:1px}
+#apikey-input:focus{outline:none;border-color:var(--ember2)}
+.apikey-actions{display:flex;gap:.6rem;flex-wrap:wrap;margin:.2rem 0 .6rem}
+.apikey-status{font-family:var(--font-retro);font-size:1.15rem;line-height:1.3;min-height:1.4rem;color:var(--muted)}
+.apikey-status .ok{color:var(--good)} .apikey-status .lose{color:var(--bad)} .apikey-status .warn{color:var(--ember2)}
+.keynote{background:#141a06;border:2px solid var(--mana);border-radius:10px;padding:.6rem .8rem;margin-bottom:1rem;
+  font-family:var(--font-retro);font-size:1.2rem;color:#f2edff;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.keynote .knbtn{margin-left:auto}
+
 /* ================= LEVEL UP ================= */
 .levelup{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:#05040aee;animation:fade .2s}
 .levelup-inner{text-align:center;animation:lupop .5s cubic-bezier(.2,1.4,.4,1)}

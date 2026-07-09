@@ -221,10 +221,40 @@ function renderKeys(){
 }
 function openKeys(){ rebinding=null; renderKeys(); $('#keys-modal').classList.remove('hidden'); }
 
+// ---- Bring-your-own Gemini key (real AI grading). Stored per-device in localStorage,
+// sent with each grade request, never persisted on the server or shared with other players.
+function getGemKey(){ return localStorage.getItem('forge_gemini_key') || ''; }
+function hasGemKey(){ return !!getGemKey().trim(); }
+function openApiKey(){
+  const inp=$('#apikey-input'); inp.value=getGemKey(); inp.type='password';
+  $('#apikey-status').innerHTML = hasGemKey() ? '<span class="ok">✓ a key is saved on this device</span>' : 'No key yet — answers use the offline grader.';
+  $('#apikey-modal').classList.remove('hidden');
+}
+async function saveAndTestKey(){
+  const key=$('#apikey-input').value.trim(); const st=$('#apikey-status');
+  if(!key){ st.textContent='Paste a key first (starts with AIza…).'; return; }
+  localStorage.setItem('forge_gemini_key', key);
+  st.innerHTML='<span class="spinner"></span> testing your key…';
+  try{
+    const r=await fetch('/api/verify-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})}).then(x=>x.json());
+    if(r.ok){ st.innerHTML='<span class="ok">🎉 Working! Your answers now get real AI grading.</span>'; sfx('win'); }
+    else if(r.status===429){ st.innerHTML='<span class="warn">Key works but hit today\'s free limit — try later (resets ~midnight Pacific).</span>'; }
+    else { st.innerHTML=`<span class="lose">That key didn't work${r.status?` (HTTP ${r.status})`:''}. Re-copy it with the copy button and try again.</span>`; }
+  }catch(e){ st.innerHTML='<span class="lose">Couldn\'t reach the server to test. Saved anyway — try grading a step.</span>'; }
+  updateKeyNudge();
+}
+function clearKey(){ localStorage.removeItem('forge_gemini_key'); $('#apikey-input').value=''; $('#apikey-status').textContent='Key removed. Answers use the offline grader until you add one.'; updateKeyNudge(); }
+function updateKeyNudge(){ const b=$('#btn-apikey'); if(b) b.textContent = hasGemKey() ? '🔑' : '🔑❗'; }
+
 function wireChrome(){
   $('#btn-gm').onclick = ()=>{ initAudio(); loginGM(); };
   $('#btn-keys').onclick = ()=>{ sfx('click'); openKeys(); };
   $('#keys-reset').onclick = ()=>{ localStorage.removeItem('forge_keys'); renderKeys(); };
+  $('#btn-apikey').onclick = ()=>{ sfx('click'); openApiKey(); };
+  $('#apikey-save').onclick = ()=>{ sfx('click'); saveAndTestKey(); };
+  $('#apikey-clear').onclick = ()=>{ sfx('click'); clearKey(); };
+  $('#apikey-show').onclick = ()=>{ const i=$('#apikey-input'); i.type = i.type==='password'?'text':'password'; };
+  updateKeyNudge();
   window.addEventListener('keydown',(e)=>{ if(!rebinding)return; e.preventDefault(); const key=e.key.toLowerCase();
     if(key.length===1 && key!==' '){ const k=getKeys(); k[rebinding]=key; localStorage.setItem('forge_keys',JSON.stringify(k)); }
     rebinding=null; renderKeys(); });
@@ -306,6 +336,12 @@ function openQuest(qid){
     : `⚔ <button class="pixel-btn ghost bnote">Fight this quest's battle</button>`;
   note.querySelector('.bnote').onclick = ()=>{ $('#quest-modal').classList.add('hidden'); launchQuestBattle(qid); };
   box.appendChild(note);
+  if(!hasGemKey() && !isGod()){
+    const kn = document.createElement('div'); kn.className='keynote';
+    kn.innerHTML = `🔑 No AI key yet — your answers use a basic offline grader. <button class="pixel-btn ghost knbtn">Add your key for real grading</button>`;
+    kn.querySelector('.knbtn').onclick = ()=>{ openApiKey(); };
+    box.appendChild(kn);
+  }
   q.steps.forEach(step=>box.appendChild(renderStep(step)));
   $('#quest-modal').classList.remove('hidden');
 }
@@ -354,7 +390,7 @@ function renderStep(step){
     btn.disabled=true; const lbl=btn.textContent; btn.innerHTML='<span class="spinner"></span> judging';
     try{
       const data = await fetch('/api/grade',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({crewId:ME,stepId:step.id,response})}).then(r=>r.json());
+        body:JSON.stringify({crewId:ME,stepId:step.id,response,userKey:getGemKey()})}).then(r=>r.json());
       STATE = data.state;
       slot.innerHTML=''; slot.appendChild(gradeCard(data.result));
       const r=data.result;

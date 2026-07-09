@@ -30,6 +30,9 @@ const ACTS = [
     id: 'act0', title: 'Act 0 — Setup', theme: 'Get Loaded',
     quests: [
       { id: 'q0', code: 'Q0', title: 'Get Loaded', steps: [
+        { id: 'q0key', title: 'Power up your key', xp: 60,
+          prompt: "First, real AI grading needs YOUR own free key. Tap the 🔑 button (top bar), then open aistudio.google.com/apikey, sign in, and click Create API key — it's free, no billing. Copy it (starts with AIza…), paste it into the 🔑 panel, and hit Save & Test until it says it's working. Then answer here: where is your key stored, and name ONE rule for keeping it safe.",
+          rubric: "Pass if they show they set up a key AND state that it's stored in their own browser/device (not shared or on the server) AND give one real safety rule (don't commit it to Git, don't paste it in chat/screenshots, keep it in a .env, or rotate/revoke it if it leaks). Reward genuine effort; this is their first setup step." },
         { id: 'q0s1', title: 'Loadout check', xp: 100,
           prompt: "You're about to start the Forge. Name the core free tools you'll use, and tell us which crew class you picked (Vanguard / Bard / Artificer / Engine) and why it fits you.",
           rubric: "Pass if the response names at least THREE of these tools (claude.ai, Google AI Studio / Gemini, Claude Desktop, VS Code, Python, Git or GitHub, Phaser) AND names one crew class with a short reason. Reward genuine effort." },

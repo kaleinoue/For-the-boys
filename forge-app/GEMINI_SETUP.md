@@ -71,7 +71,11 @@ Only needed if you run the app on your own computer (`node server.js`).
 
 ## FAQ
 
-- **Do the boys each need a key?** No — one key on the server powers everyone.
+- **Do the boys each need a key?** Not required — one key on the server powers
+  everyone. But each player *can* add their **own** free key in the app via the
+  **🔑** button (also the required first Q0 step). Their key is saved only in their
+  browser, sent with each grade request, and never stored on the server — handy
+  when the shared server key hits its free daily limit, or if you never set one.
 - **Is it really free?** Yes, on the free tier. Heavy use can hit daily limits
   (grading just falls back to the offline grader until it resets).
 - **Where do I change it later?** Same place: Render → the-forge → Environment →

@@ -111,11 +111,13 @@ const supabaseStore = {
 const store = USE_SUPABASE ? supabaseStore : fileStore;
 
 // ---- the AI judge -----------------------------------------------------------
-async function gradeResponse(step, response) {
+async function gradeResponse(step, response, userKey) {
   const text = (response || '').trim();
   if (text.length < 3)
     return { passed: false, score: 0, feedback: "Looks empty — give it a real go! Even a rough answer earns feedback.", tip: "Write a few sentences and submit again." };
-  if (!GEMINI_KEY) return mockGrade(step, text);
+  // Prefer the player's own key (BYOK, sent per-request, never stored); fall back to a server key if set.
+  const key = (userKey && userKey.trim()) || GEMINI_KEY;
+  if (!key) return mockGrade(step, text);
 
   const prompt =
 `You are the XP Judge for THE FORGE, a fun, gamified AI course where teens (around 18) learn AI while building a video game. Grade the student's response to a task against the rubric. Be ENCOURAGING but fair — reward real effort and understanding, not perfection or length. Speak directly to the student ("you").
@@ -139,7 +141,7 @@ Return ONLY JSON:
   for (const model of models) {
     for (let attempt = 0; attempt < 2; attempt++) {
       let res;
-      try { res = await callGemini(model, prompt); }
+      try { res = await callGemini(model, prompt, key); }
       catch (e) { lastErr = 'network: ' + e.message; break; }
       if (res.status === 429) { lastErr = `429 rate limit on ${model}`; if (attempt === 0) { await sleep(1500); continue; } break; }
       if (!res.ok) { lastErr = `${model} HTTP ${res.status}`; break; }
@@ -157,19 +159,20 @@ Return ONLY JSON:
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-async function callGemini(model, prompt) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
+async function callGemini(model, prompt, key) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key || GEMINI_KEY}`;
   return fetch(url, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.4 } }),
   });
 }
 
-// Live check: is the Gemini key actually working? Reports the real error.
-async function geminiPing() {
-  if (!GEMINI_KEY) return { keyPresent: false, ok: false, note: 'GEMINI_API_KEY is empty/not set on this server.' };
+// Live check: is a Gemini key actually working? Reports the real error. Defaults to the server key.
+async function geminiPing(key) {
+  const k = (key && key.trim()) || GEMINI_KEY;
+  if (!k) return { keyPresent: false, ok: false, note: 'No API key set. Add your own in the app (🔑) or set GEMINI_API_KEY on the server.' };
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${k}`;
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }) });
     if (!res.ok) return { keyPresent: true, ok: false, status: res.status, error: (await res.text()).slice(0, 300) };
     return { keyPresent: true, ok: true };
@@ -361,6 +364,11 @@ const server = http.createServer(async (req, res) => {
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
       return sendJson(res, 200, { storage: USE_SUPABASE ? 'supabase' : 'file', model: MODEL, gemini: await geminiPing() });
     }
+    // "Test my key" for the in-app API-key panel. The key is checked live and NOT stored anywhere.
+    if (req.method === 'POST' && url === '/api/verify-key') {
+      const { key } = await readBody(req);
+      return sendJson(res, 200, await geminiPing(key));
+    }
     if (req.method === 'POST' && url === '/api/reset') {
       const { code } = await readBody(req);
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Reset requires the Game Master passcode.' });
@@ -368,13 +376,13 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, decorate(await store.getAll()));
     }
     if (req.method === 'POST' && url === '/api/grade') {
-      const { crewId, stepId, response } = await readBody(req);
+      const { crewId, stepId, response, userKey } = await readBody(req);
       const step = stepIndex[stepId];
       const state = await store.getAll();
       const member = state.crew[crewId];
       if (!step || !member) return sendJson(res, 400, { error: 'Unknown crew member or step.' });
 
-      const result = await gradeResponse(step, response);
+      const result = await gradeResponse(step, response, userKey);   // userKey is used transiently, never stored
       const awarded = result.passed ? step.xp : 0;
       const prev = member.steps[stepId];
       const keepBest = prev && prev.passed && prev.xp >= awarded;

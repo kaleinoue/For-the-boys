@@ -42,6 +42,7 @@
         <button id="btn-gear" class="pixel-btn">🎒 GEAR</button>
         <button id="btn-guild" class="pixel-btn">🏆 GUILD</button>
         <select id="music-pick" class="music-pick" title="music"></select>
+        <button id="btn-apikey" class="pixel-btn" title="your AI grading key">🔑</button>
         <button id="btn-keys" class="pixel-btn" title="battle keys (PC)">⌨️</button>
         <button id="btn-sound" class="pixel-btn" title="sound effects">🔊</button>
         <button id="btn-switch" class="pixel-btn">↺ HERO</button>
@@ -66,6 +67,29 @@
       <button class="modal-close" data-close>✕</button>
       <h2 class="guild-title">🎒 <span id="gear-name"></span></h2>
       <div id="gear-body"></div>
+    </div>
+  </div>
+
+  <!-- ============ API KEY (real AI grading) ============ -->
+  <div id="apikey-modal" class="modal hidden">
+    <div class="modal-card">
+      <button class="modal-close" data-close>✕</button>
+      <h2 class="guild-title">🔑 Your AI Grading Key</h2>
+      <p class="keys-help">The Forge grades your written answers with Google's <b>Gemini</b> AI. Paste your own <b>free</b> key here and your answers get real AI feedback. No key = a basic offline grader (it says so in your feedback).</p>
+      <ol class="keys-help apikey-steps">
+        <li>Go to <b>aistudio.google.com/apikey</b> and sign in with a Google account.</li>
+        <li>Click <b>Create API key</b> → copy it with the copy button (it starts with <b>AIza…</b>). It's free — no billing needed.</li>
+        <li>Paste it below and hit <b>Save &amp; Test</b>. 🔒 It stays in your browser on this device and is never shown to other players or saved on the server.</li>
+      </ol>
+      <div class="apikey-row">
+        <input id="apikey-input" type="password" placeholder="AIza…" autocomplete="off" spellcheck="false" />
+        <button id="apikey-show" class="pixel-btn ghost" title="show/hide">👁</button>
+      </div>
+      <div class="apikey-actions">
+        <button id="apikey-save" class="pixel-btn">Save &amp; Test</button>
+        <button id="apikey-clear" class="pixel-btn ghost">remove key</button>
+      </div>
+      <div id="apikey-status" class="apikey-status"></div>
     </div>
   </div>
 
