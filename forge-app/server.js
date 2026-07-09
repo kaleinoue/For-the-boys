@@ -40,6 +40,20 @@ const PASS_SCORE = 60;
 const ADMIN_CODE = process.env.ADMIN_CODE || 'forge-gm';
 const adminOK = (code) => !!code && code === ADMIN_CODE;
 
+// Validate + clamp a mob definition coming from the God Mode editor.
+function sanitizeMob(m) {
+  if (!m || typeof m !== 'object') return null;
+  const id = String(m.id || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
+  if (!id) return null;
+  const num = (v, def, lo, hi) => { v = Number(v); if (!isFinite(v)) v = def; return Math.max(lo, Math.min(hi, Math.round(v * 100) / 100)); };
+  const ai = m.ai === 'shooter' ? 'shooter' : 'chase';
+  const color = /^#[0-9a-fA-F]{6}$/.test(m.color) ? m.color : '#cc8855';
+  const def = { name: String(m.name || id).slice(0, 28), hp: num(m.hp, 20, 1, 100000), atk: num(m.atk, 8, 0, 100000),
+    speed: num(m.speed, 70, 5, 600), r: num(m.r, 13, 6, 60), color, ai };
+  if (ai === 'shooter') { def.shotCd = num(m.shotCd, 1.7, 0.2, 10); def.shotSpd = num(m.shotSpd, 180, 40, 1200); }
+  return { id, def };
+}
+
 // Supabase (optional). Use the SERVICE ROLE key — server-side only.
 const SB_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || '';
@@ -83,10 +97,13 @@ async function sbFetch(pathQuery, opts = {}) {
   return res;
 }
 
+const EMPTY_MOBS = { mobs: {}, levels: {} };
 const fileStore = {
   async getAll() { try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { return emptyState(); } },
   async putMember(id, member) { const s = await this.getAll(); s.crew[id] = member; fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2)); },
-  async resetAll() { fs.writeFileSync(STATE_FILE, JSON.stringify(emptyState(), null, 2)); },
+  async resetAll() { const s = await this.getAll(); fs.writeFileSync(STATE_FILE, JSON.stringify({ ...emptyState(), mobs: s.mobs || EMPTY_MOBS }, null, 2)); },
+  async getMobs() { const s = await this.getAll(); return s.mobs || { ...EMPTY_MOBS }; },
+  async putMobs(cfg) { const s = await this.getAll(); s.mobs = cfg; fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2)); },
 };
 
 const supabaseStore = {
@@ -106,6 +123,14 @@ const supabaseStore = {
   async resetAll() {
     const rows = CREW.map(c => ({ crew_id: c.id, xp: 0, steps: {}, updated_at: new Date().toISOString() }));
     await sbFetch(SB_TABLE, { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(rows) });
+  },
+  // Mob DB lives in a reserved row (crew_id '__mobs'); getAll ignores it since it isn't a real crew id.
+  async getMobs() {
+    try { const rows = await (await sbFetch(`${SB_TABLE}?crew_id=eq.__mobs&select=steps`)).json(); return (rows[0] && rows[0].steps) || { ...EMPTY_MOBS }; }
+    catch { return { ...EMPTY_MOBS }; }
+  },
+  async putMobs(cfg) {
+    await sbFetch(SB_TABLE, { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ crew_id: '__mobs', xp: 0, steps: cfg, updated_at: new Date().toISOString() }]) });
   },
 };
 
@@ -237,6 +262,40 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && url === '/api/quests') return sendJson(res, 200, publicQuests());
     if (req.method === 'GET' && url === '/api/state') return sendJson(res, 200, decorate(await store.getAll()));
+
+    // ---- Mob database ----
+    if (req.method === 'GET' && url === '/api/mobs') {
+      const cfg = await store.getMobs();
+      return sendJson(res, 200, { mobs: cfg.mobs || {}, levels: cfg.levels || {} });
+    }
+    if (req.method === 'POST' && url === '/api/admin/mobs') {          // create / edit a mob
+      const { code, mob } = await readBody(req);
+      if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
+      const s = sanitizeMob(mob);
+      if (!s) return sendJson(res, 400, { error: 'Invalid mob (need at least an id).' });
+      const cfg = await store.getMobs(); cfg.mobs = cfg.mobs || {}; cfg.mobs[s.id] = s.def;
+      await store.putMobs(cfg);
+      return sendJson(res, 200, { ok: true, id: s.id, mobs: cfg.mobs, levels: cfg.levels || {} });
+    }
+    if (req.method === 'POST' && url === '/api/admin/mobs/delete') {   // remove a custom mob / override
+      const { code, id } = await readBody(req);
+      if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
+      const cfg = await store.getMobs(); if (cfg.mobs) delete cfg.mobs[id];
+      for (const lv in (cfg.levels || {})) cfg.levels[lv] = (cfg.levels[lv] || []).filter(x => x !== id);
+      await store.putMobs(cfg);
+      return sendJson(res, 200, { ok: true, mobs: cfg.mobs || {}, levels: cfg.levels || {} });
+    }
+    if (req.method === 'POST' && url === '/api/admin/mobs/levels') {   // assign which mobs spawn at a level
+      const { code, level, mobIds } = await readBody(req);
+      if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
+      const lv = String(parseInt(level, 10));
+      if (!/^\d+$/.test(lv)) return sendJson(res, 400, { error: 'Bad level.' });
+      const cfg = await store.getMobs(); cfg.levels = cfg.levels || {};
+      const ids = Array.isArray(mobIds) ? [...new Set(mobIds.map(String))].slice(0, 24) : [];
+      if (ids.length) cfg.levels[lv] = ids; else delete cfg.levels[lv];
+      await store.putMobs(cfg);
+      return sendJson(res, 200, { ok: true, mobs: cfg.mobs || {}, levels: cfg.levels });
+    }
 
     // ---- Game Master / admin ----
     if (req.method === 'POST' && url === '/api/admin/verify') {

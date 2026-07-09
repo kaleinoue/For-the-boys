@@ -93,6 +93,40 @@
     </div>
   </div>
 
+  <!-- ============ MOB DATABASE (God Mode) ============ -->
+  <div id="mobs-modal" class="modal hidden">
+    <div class="modal-card mobs-card">
+      <button class="modal-close" data-close>✕</button>
+      <h2 class="guild-title">🗿 Mob Database</h2>
+      <div class="mobs-grid">
+        <div class="mobs-col">
+          <h3 class="mobs-h">Roster</h3>
+          <div id="mob-list"></div>
+          <h3 class="mobs-h">Assign mobs to a level</h3>
+          <div id="mob-levels"></div>
+        </div>
+        <div class="mobs-col">
+          <h3 class="mobs-h" id="mob-form-title">New mob</h3>
+          <div class="mob-form">
+            <label>ID <input id="mf-id" placeholder="e.g. spitter" autocomplete="off"/></label>
+            <label>Name <input id="mf-name" placeholder="Spitter" autocomplete="off"/></label>
+            <label>Type <select id="mf-ai"><option value="chase">melee (chases)</option><option value="shooter">ranged (shoots)</option></select></label>
+            <label>HP <input id="mf-hp" type="number" min="1"/></label>
+            <label>Attack <input id="mf-atk" type="number" min="0"/></label>
+            <label>Speed <input id="mf-speed" type="number" min="5"/></label>
+            <label>Radius <input id="mf-r" type="number" min="6"/></label>
+            <label>Color <input id="mf-color" type="color"/></label>
+            <div id="mf-shooter">
+              <label>Shot cooldown (s) <input id="mf-shotcd" type="number" step="0.1" min="0.2"/></label>
+              <label>Shot speed <input id="mf-shotspd" type="number" min="40"/></label>
+            </div>
+            <div class="mob-form-actions"><button id="mf-save" class="pixel-btn">Save mob</button><button id="mf-new" class="pixel-btn ghost">clear / new</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ BATTLE KEYS (PC) ============ -->
   <div id="keys-modal" class="modal hidden">
     <div class="modal-card">

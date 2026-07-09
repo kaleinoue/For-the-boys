@@ -73,6 +73,23 @@ function itemMods(itemId, level) { const g = GEAR[itemId]; const f = 1 + (level 
 const NORMAL_LOOT = { Common:['wood_sword','leather','charm'], Rare:['iron_sword','chainmail','swift_boots'], Legendary:['flame_blade','aegis','focus_amulet'] };
 const MYTHIC_BY_CLASS = { zeppelin:'myth_zeppelin', leo:'myth_leo', jonah:'myth_jonah', jyana:'myth_jyana', via:'myth_via' };
 
+// ---- Mob database ----------------------------------------------------------
+// The 3 built-ins above are the base roster. God Mode can add custom mobs and
+// assign which mobs spawn at each level; those live in a server-side config that
+// gets merged in here at runtime via setMobConfig().
+const BASE_MOB_IDS = ['grunt', 'zap', 'brute'];
+let LEVEL_MOBS = {};                                   // { levelIndex: [mobId, ...] } — God Mode assignments
+function setMobConfig(cfg) {                            // called by the app after fetching /api/mobs
+  if (cfg && cfg.mobs) for (const id in cfg.mobs) { if (cfg.mobs[id]) ENEMIES[id] = cfg.mobs[id]; }
+  LEVEL_MOBS = (cfg && cfg.levels) || {};
+}
+function mobPoolFor(level) {                            // which mob ids can spawn at this level
+  const assigned = LEVEL_MOBS[level];
+  if (Array.isArray(assigned) && assigned.length) { const p = assigned.filter(k => ENEMIES[k]); if (p.length) return p; }
+  const pool = ['grunt', 'zap']; if (level >= 4) pool.push('brute');   // default ramp
+  return pool.filter(k => ENEMIES[k]);
+}
+
 // Difficulty by quest index / "level" (0..16).
 function battlePlan(questIndex) {
   const level = questIndex;
@@ -80,14 +97,19 @@ function battlePlan(questIndex) {
   const atkScale = 1 + level * 0.14;                   // power ramps
   const coord    = Math.min(1, level / 9);             // mob coordination 0..1
   const waveCount = 2 + Math.floor(level / 3);         // more waves later
+  const pool = mobPoolFor(level);
+  const ranged = pool.filter(k => ENEMIES[k] && ENEMIES[k].ai === 'shooter');
+  const melee  = pool.filter(k => !ENEMIES[k] || ENEMIES[k].ai !== 'shooter');
+  const rangedPick = ranged.length ? ranged : ['zap'];  // ALWAYS at least one ranged available
+  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
   const waves = [];
   for (let w = 0; w < waveCount; w++) {
     const n = 3 + Math.floor(level / 4) + w;           // more enemies per later wave
-    const types = [];
-    for (let i = 0; i < n; i++) {
-      const r = Math.random();
-      types.push(level >= 4 && r < 0.18 ? 'brute' : r < 0.4 ? 'zap' : 'grunt');
+    const types = [pick(rangedPick)];                  // guarantee >=1 ranged per wave
+    for (let i = 1; i < n; i++) {
+      types.push(Math.random() < 0.32 ? pick(rangedPick) : pick(melee.length ? melee : pool));
     }
+    for (let i = types.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [types[i], types[j]] = [types[j], types[i]]; }  // shuffle so ranged isn't always first
     waves.push(types);
   }
   return { waves, level, hpScale, atkScale, coord, xp: 60 + level * 10 };
@@ -124,6 +146,6 @@ const QUEST_DIALOG = {
 };
 
 if (typeof window !== 'undefined') {
-  window.BATTLE = { CLASSES, ENEMIES, BOSS, GEAR, TIER_COLOR, DROP_RATES, SCRAP_VALUE, UPGRADE, RARE_OF_SLOT, LEG_MAX_LEVEL, LEG_FODDER_NEED, legLevelGold, itemMods, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, GENERIC_DIALOG, QUEST_DIALOG };
+  window.BATTLE = { CLASSES, ENEMIES, BASE_MOB_IDS, BOSS, GEAR, TIER_COLOR, DROP_RATES, SCRAP_VALUE, UPGRADE, RARE_OF_SLOT, LEG_MAX_LEVEL, LEG_FODDER_NEED, legLevelGold, itemMods, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, setMobConfig, mobPoolFor, GENERIC_DIALOG, QUEST_DIALOG };
 }
-if (typeof module !== 'undefined') module.exports = { CLASSES, ENEMIES, BOSS, GEAR, TIER_COLOR, DROP_RATES, SCRAP_VALUE, UPGRADE, RARE_OF_SLOT, LEG_MAX_LEVEL, LEG_FODDER_NEED, legLevelGold, itemMods, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, GENERIC_DIALOG, QUEST_DIALOG };
+if (typeof module !== 'undefined') module.exports = { CLASSES, ENEMIES, BASE_MOB_IDS, BOSS, GEAR, TIER_COLOR, DROP_RATES, SCRAP_VALUE, UPGRADE, RARE_OF_SLOT, LEG_MAX_LEVEL, LEG_FODDER_NEED, legLevelGold, itemMods, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, setMobConfig, mobPoolFor, GENERIC_DIALOG, QUEST_DIALOG };

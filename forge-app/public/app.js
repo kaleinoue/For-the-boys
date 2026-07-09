@@ -4,7 +4,22 @@ let ME = localStorage.getItem('forge_crew_id') || null;
 let openQuestId = null;
 let GM_CODE = localStorage.getItem('forge_gm_code') || null;   // Game Master passcode
 let RUBRICS = null;                                            // cached admin rubrics
+let MOBS = { mobs:{}, levels:{} };                             // God-Mode mob DB (custom mobs + level assignments)
 const isGod = () => !!GM_CODE;
+const MAX_LEVEL = 16;                                          // quest indices 0..16
+
+// Fetch the mob DB and merge it into the battle engine so battles + God Mode agree.
+async function loadMobs(){
+  try{ MOBS = await fetch('/api/mobs').then(r=>r.json()); }catch{ MOBS = { mobs:{}, levels:{} }; }
+  if(window.BATTLE && window.BATTLE.setMobConfig) window.BATTLE.setMobConfig(MOBS);
+}
+// The full effective roster = base built-ins + custom mobs (custom overrides base by id).
+function allMobs(){
+  const B=window.BATTLE, out={};
+  for(const id of (B.BASE_MOB_IDS||[])) out[id] = { ...B.ENEMIES[id], base:true };
+  for(const id in (MOBS.mobs||{})) out[id] = { ...MOBS.mobs[id], base:(B.BASE_MOB_IDS||[]).includes(id) };
+  return out;
+}
 const $ = (s) => document.querySelector(s);
 const REGION_COLORS = ['#ff6b1a','#ff4d8d','#8b5cf6','#22c1c3','#e5484d','#ffd15c'];
 
@@ -13,6 +28,7 @@ const REGION_COLORS = ['#ff6b1a','#ff4d8d','#8b5cf6','#22c1c3','#e5484d','#ffd15
   makeEmbers();
   QUESTS = await fetch('/api/quests').then(r=>r.json());
   STATE  = await fetch('/api/state').then(r=>r.json());
+  await loadMobs();                                            // merge God-Mode mobs + level assignments into the battle engine
   buildHeroSelect();
   wireChrome();
   if (ME) enterGame();
@@ -82,10 +98,79 @@ function renderAdminBar(){
   const opts = QUESTS.crew.map(c=>`<option value="${c.id}" ${c.id===ME?'selected':''}>${c.emoji} ${c.name}</option>`).join('');
   bar.innerHTML = `<span class="gm-tag">🛠️ GOD MODE</span>
     <label class="gm-actas">Act as: <select id="gm-actas">${opts}</select></label>
+    <button id="gm-mobs" class="pixel-btn ghost">🗿 Mob DB</button>
     <span class="gm-hint">all trials unlocked · force-clear + rubrics on each step</span>
     <button id="gm-logout" class="pixel-btn ghost">exit GM</button>`;
   $('#gm-actas').onchange = (e)=>{ ME = e.target.value; localStorage.setItem('forge_crew_id',ME); renderHUD(); renderMap(); };
+  $('#gm-mobs').onclick = ()=>{ sfx('click'); openMobs(); };
   $('#gm-logout').onclick = logoutGM;
+}
+
+// ---- God Mode: Mob Database -------------------------------------------------
+let mobEditId = null;                                          // id being edited (null = new)
+function openMobs(){ if(!isGod()) return; mobEditId=null; renderMobs(); $('#mobs-modal').classList.remove('hidden'); }
+function renderMobs(){
+  const all = allMobs();
+  // roster list
+  $('#mob-list').innerHTML = Object.entries(all).map(([id,m])=>{
+    const tag = m.base?'<span class="mob-base">base</span>':'<span class="mob-custom">custom</span>';
+    const rng = m.ai==='shooter'?` · 🏹 ${m.shotSpd||180}spd/${m.shotCd||1.7}s`:' · 🗡️ melee';
+    return `<div class="mobrow"><span class="mob-dot" style="background:${m.color}"></span>
+      <b>${esc(m.name)}</b> <small>[${id}]</small> ${tag}
+      <small>❤${m.hp} ⚔${m.atk} 👟${m.speed} ⌀${m.r}${rng}</small>
+      <span class="mobrow-btns"><button class="pixel-btn ghost" data-medit="${id}">edit</button>${m.base?'':`<button class="pixel-btn ghost" data-mdel="${id}">✕</button>`}</span></div>`;
+  }).join('') || '<div class="empty">No mobs.</div>';
+  $('#mob-list').querySelectorAll('[data-medit]').forEach(b=>b.onclick=()=>loadMobForm(b.dataset.medit));
+  $('#mob-list').querySelectorAll('[data-mdel]').forEach(b=>b.onclick=()=>deleteMob(b.dataset.mdel));
+  // level assignments grid
+  const ids = Object.keys(all);
+  let lv = document.getElementById('mob-level-pick') ? +document.getElementById('mob-level-pick').value : 0;
+  const levelOpts = Array.from({length:MAX_LEVEL+1},(_,i)=>`<option value="${i}" ${i===lv?'selected':''}>Level ${i}</option>`).join('');
+  const assigned = (MOBS.levels&&MOBS.levels[lv])||[];
+  $('#mob-levels').innerHTML = `<div class="mlv-top">Spawns at <select id="mob-level-pick">${levelOpts}</select>
+    <small>(none checked = default: grunt+zap, brute from Lv4)</small></div>
+    <div class="mlv-checks">${ids.map(id=>`<label class="mlv-check"><input type="checkbox" data-mlv="${id}" ${assigned.includes(id)?'checked':''}/> ${esc(all[id].name)}</label>`).join('')}</div>
+    <button id="mob-level-save" class="pixel-btn">save Level ${lv} spawns</button>
+    <div id="mob-warn" class="mob-warn"></div>`;
+  $('#mob-level-pick').onchange = renderMobs;
+  $('#mob-level-save').onclick = saveLevelAssign;
+  // reflect the "always at least one ranged" rule for the picked level
+  const checkedIds = assigned.length?assigned:(lv>=4?['grunt','zap','brute']:['grunt','zap']);
+  const hasRanged = checkedIds.some(id=>all[id]&&all[id].ai==='shooter');
+  $('#mob-warn').innerHTML = hasRanged?'' : '⚠ No ranged mob here — the game will still add a Zapper (every wave needs ≥1 ranged).';
+}
+function loadMobForm(id){
+  const m = id ? allMobs()[id] : null; mobEditId = id||null;
+  const g=(k,d)=>m&&m[k]!=null?m[k]:d;
+  $('#mob-form-title').textContent = id?`Edit ${id}`:'New mob';
+  $('#mf-id').value = id||''; $('#mf-id').disabled = !!id;
+  $('#mf-name').value = g('name',''); $('#mf-hp').value=g('hp',20); $('#mf-atk').value=g('atk',8);
+  $('#mf-speed').value=g('speed',70); $('#mf-r').value=g('r',13); $('#mf-color').value=g('color','#cc8855');
+  $('#mf-ai').value=g('ai','chase'); $('#mf-shotcd').value=g('shotCd',1.7); $('#mf-shotspd').value=g('shotSpd',180);
+  toggleShooterFields();
+}
+function toggleShooterFields(){ $('#mf-shooter').style.display = $('#mf-ai').value==='shooter'?'':'none'; }
+async function saveMob(){
+  const mob = { id:$('#mf-id').value.trim(), name:$('#mf-name').value.trim(), hp:$('#mf-hp').value, atk:$('#mf-atk').value,
+    speed:$('#mf-speed').value, r:$('#mf-r').value, color:$('#mf-color').value, ai:$('#mf-ai').value,
+    shotCd:$('#mf-shotcd').value, shotSpd:$('#mf-shotspd').value };
+  if(!mob.id){ alert('Give the mob an id (letters/numbers).'); return; }
+  const r = await fetch('/api/admin/mobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,mob})}).then(x=>x.json()).catch(()=>({error:'network'}));
+  if(r.error){ alert(r.error); return; }
+  MOBS={mobs:r.mobs,levels:r.levels}; window.BATTLE.setMobConfig(MOBS); sfx('win'); toast(`🗿 Saved mob "${r.id}"`); mobEditId=null; loadMobForm(null); renderMobs();
+}
+async function deleteMob(id){
+  if(!confirm(`Delete custom mob "${id}"?`)) return;
+  const r = await fetch('/api/admin/mobs/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,id})}).then(x=>x.json()).catch(()=>({error:'network'}));
+  if(r.error){ alert(r.error); return; }
+  MOBS={mobs:r.mobs,levels:r.levels}; window.BATTLE.setMobConfig(MOBS); sfx('click'); toast(`Deleted "${id}"`); renderMobs();
+}
+async function saveLevelAssign(){
+  const lv = +$('#mob-level-pick').value;
+  const mobIds = Array.from(document.querySelectorAll('[data-mlv]')).filter(c=>c.checked).map(c=>c.dataset.mlv);
+  const r = await fetch('/api/admin/mobs/levels',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,level:lv,mobIds})}).then(x=>x.json()).catch(()=>({error:'network'}));
+  if(r.error){ alert(r.error); return; }
+  MOBS={mobs:r.mobs,levels:r.levels}; window.BATTLE.setMobConfig(MOBS); sfx('win'); toast(`Level ${lv} spawns saved`); renderMobs();
 }
 
 // ---- character / inventory (gear affects battle stats) ----
@@ -251,6 +336,9 @@ function wireChrome(){
   $('#btn-gm').onclick = ()=>{ initAudio(); loginGM(); };
   $('#btn-keys').onclick = ()=>{ sfx('click'); openKeys(); };
   $('#keys-reset').onclick = ()=>{ localStorage.removeItem('forge_keys'); renderKeys(); };
+  $('#mf-save').onclick = ()=>{ sfx('click'); saveMob(); };
+  $('#mf-new').onclick = ()=>{ loadMobForm(null); };
+  $('#mf-ai').onchange = ()=> toggleShooterFields();
   $('#btn-apikey').onclick = ()=>{ sfx('click'); openApiKey(); };
   $('#apikey-save').onclick = ()=>{ sfx('click'); saveAndTestKey(); };
   $('#apikey-clear').onclick = ()=>{ sfx('click'); clearKey(); };

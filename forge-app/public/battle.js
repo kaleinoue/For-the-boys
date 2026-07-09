@@ -76,12 +76,12 @@
     // ---- state ----
     const HEART_HP = 22;
     const player = { x: W / 2, y: H * 0.7, r: 14, maxHearts: Math.max(3, Math.round(stats.hp / HEART_HP)), face: { x: 0, y: -1 },
-      atkCd: 0, dodgeCd: 0, iframe: 0, blocking: false, dashV: null };
+      atkCd: 0, dodgeCd: 0, iframe: 0, blocking: false, dashV: null, blockT: 0, blockCd: 0, kbx: 0, kby: 0, kbt: 0 };
     player.hearts = player.maxHearts;
     let enemies = [], projs = [], loot = [], fx = [];
     let waveIdx = -1, bossActive = false, boss = null, state = 'dialog', dlgQueue = [], runLoot = [], last = 0, raf = 0, aliveFrames = 0, paused = false, shake = 0;
-    let elapsed = 0, raged = false;   // active-fight seconds; after RAGE_START the horde escalates (speed/attack/range)
-    const RAGE_START = 180;
+    let elapsed = 0, raged = false, warned = false;   // active-fight seconds; after RAGE_START the horde escalates (speed/attack/range)
+    const RAGE_START = 60;             // frenzy begins at 60s and steps up every 60s; warning fires 15s before
 
     // open inventory mid-battle (pauses); resume recomputes stats from new gear
     function openInv() { if (paused || (state !== 'fight' && state !== 'dialog') || !opts.onInventory) return; paused = true; opts.onInventory(resumeFromInv); }
@@ -115,13 +115,19 @@
     function nextLine(then) { if (!dlgQueue.length) { dlg.classList.remove('on'); then && then(); return; } dlgLine.textContent = dlgQueue.shift(); dlg._then = then; }
     dlg.addEventListener('pointerdown', () => { if (state === 'dialog') nextLine(dlg._then); });
 
+    // knockback: shove `ent` away from (fromX,fromY). Works for enemies and the player.
+    function knock(ent, fromX, fromY, power) {
+      const a = Math.atan2(ent.y - fromY, ent.x - fromX);
+      ent.kbx = Math.cos(a) * power; ent.kby = Math.sin(a) * power; ent.kbt = 0.13;
+    }
     // ---- waves ----
     function spawnEnemy(typeKey, pos) {
-      const t = B.ENEMIES[typeKey]; let p = pos;
+      const t = B.ENEMIES[typeKey] || B.ENEMIES.grunt; let p = pos;
       if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') { const edge = Math.floor(rand(0, 4)); p = edge === 0 ? { x: rand(20, W - 20), y: 20 } : edge === 1 ? { x: W - 20, y: rand(20, H - 20) } : edge === 2 ? { x: rand(20, W - 20), y: H - 20 } : { x: 20, y: rand(20, H - 20) }; }
       const hp = Math.round(t.hp * plan.hpScale);
       enemies.push({ type: typeKey, x: p.x, y: p.y, r: t.r, color: t.color, hp, max: hp,
-        atk: Math.round(t.atk * plan.atkScale), speed: t.speed, ai: t.ai, hitCd: 0, shotCd: rand(0.5, t.shotCd || 2), shotSpd: t.shotSpd, flankDir: Math.random() < 0.5 ? 1 : -1 });
+        atk: Math.round(t.atk * plan.atkScale), speed: t.speed, ai: t.ai, hitCd: 0, shotCd: rand(0.5, t.shotCd || 2), shotSpd: t.shotSpd,
+        flankDir: Math.random() < 0.5 ? 1 : -1, dashCd: rand(1.5, 3.2), dashV: null, kbx: 0, kby: 0, kbt: 0 });
     }
     function startNextWave() {
       waveIdx++;
@@ -150,11 +156,13 @@
       }
       player.hearts = Math.max(0, Math.round((player.hearts - hearts) * 4) / 4);
       player.iframe = 0.5; shake = Math.min(12, shake + (hearts >= 1 ? 8 : 4)); bSfx('hurt');
+      if (sx != null) knock(player, sx, sy, player.blocking ? 120 : 300);   // clean hits shove you back harder than blocked ones
       fx.push({ t: 'dmg', x: player.x, y: player.y, life: .8, text: label });   // floats over the head
       if (player.hearts <= 0) lose();
     }
-    function damageEnemy(e, dmg) {
+    function damageEnemy(e, dmg, sx, sy) {
       e.hp -= dmg; fx.push({ t: 'spark', x: e.x, y: e.y, life: .15 }); bSfx('deal');
+      knock(e, sx != null ? sx : player.x, sy != null ? sy : player.y, 300);   // hits bounce enemies back
       if (e.hp <= 0) { killEnemy(e); }
     }
     function killEnemy(e) {
@@ -181,30 +189,37 @@
       if (keys[KEYS.up] || keys['arrowup']) iy -= 1; if (keys[KEYS.down] || keys['arrowdown']) iy += 1;
       const im = Math.hypot(ix, iy); if (im > 1) { ix /= im; iy /= im; }
       if (im > 0.15) player.face = { x: ix, y: iy };
-      player.atkCd -= dt; player.dodgeCd -= dt; player.iframe -= dt;
+      player.atkCd -= dt; player.dodgeCd -= dt; player.iframe -= dt; player.blockCd -= dt;
 
-      // block is HELD (Vanguard); dodge is a TAP dash (others)
-      const blockHeld = keys[KEYS.dodge] || keys['shift'] || touchDodgeHeld;
-      player.blocking = (cls.dodge === 'block') && !!blockHeld;
-      if (cls.dodge !== 'block' && press.dodge && player.dodgeCd <= 0) {
-        const f = player.face; player.dashV = { x: f.x * 520, y: f.y * 520, life: 0.16 }; player.iframe = 0.28; player.dodgeCd = 0.6;
+      // Vanguard block is a TIMED shield: 1s active, then 1s cooldown (no more hold-forever).
+      if (cls.dodge === 'block') {
+        if (player.blockT > 0) { player.blockT -= dt; if (player.blockT <= 0) { player.blockT = 0; player.blockCd = 1.0; } }
+        else if (press.dodge && player.blockCd <= 0) { player.blockT = 1.0; bSfx('attack'); }
+        player.blocking = player.blockT > 0;
+      } else {
+        player.blocking = false;
+        if (press.dodge && player.dodgeCd <= 0) {
+          const f = player.face; player.dashV = { x: f.x * 520, y: f.y * 520, life: 0.16 }; player.iframe = 0.28; player.dodgeCd = 0.6;
+        }
       }
       press.dodge = false;
 
-      // movement (blocking slows you down)
+      // movement (blocking slows you down); knockback shove is added on top
       const spd = stats.speed * (player.blocking ? 0.55 : 1);
       if (player.dashV) { player.x += player.dashV.x * dt; player.y += player.dashV.y * dt; player.dashV.life -= dt; if (player.dashV.life <= 0) player.dashV = null; }
       else { player.x += ix * spd * dt; player.y += iy * spd * dt; }
+      if (player.kbt > 0) { player.x += player.kbx * dt; player.y += player.kby * dt; player.kbt -= dt; }
       player.x = clamp(player.x, 16, W - 16); player.y = clamp(player.y, 60, H - 16);
 
       // attack
       if (press.atk && player.atkCd <= 0) { doAttack(); player.atkCd = cls.cd; }
       press.atk = false;
 
-      // enemies — after RAGE_START the horde grows frenzied: faster travel, attack speed, and range.
+      // enemies — the horde grows frenzied at RAGE_START and steps up every 60s (faster travel, attack speed, range).
       elapsed += dt;
+      if (!warned && elapsed >= RAGE_START - 15) { warned = true; flash('⚠ RAGE INCOMING — 15s', '#ffd15c'); bSfx('shot'); }
       if (!raged && elapsed >= RAGE_START) { raged = true; flash('THE HORDE GROWS FRENZIED!', '#ff5d5d'); bSfx('boss'); }
-      const esc = 1 + Math.max(0, elapsed - RAGE_START) / 90;   // 1x, then climbs uncapped every 90s past 3:00
+      const esc = 1 + Math.max(0, elapsed - RAGE_START) / 60;   // 1x, then climbs uncapped, +1x every 60s
       for (const e of enemies) {
         e.hitCd -= dt;
         const d = dist(e, player), dx = (player.x - e.x) / (d || 1), dy = (player.y - e.y) / (d || 1);
@@ -213,24 +228,20 @@
           const want = 210 + 70 * (esc - 1); const dir = d > want ? 1 : d < want - 40 ? -1 : 0;
           let sx = 0, sy = 0; for (const o of enemies) { if (o === e || o.ai === 'boss') continue; const dd = dist(o, e); if (dd > 0 && dd < 44) { sx += (e.x - o.x) / dd; sy += (e.y - o.y) / dd; } }
           e.x += (dx * dir + sx * plan.coord * 0.8) * e.speed * esc * dt; e.y += (dy * dir + sy * plan.coord * 0.8) * e.speed * esc * dt;
-          e.shotCd -= dt; if (e.shotCd <= 0) { e.shotCd = (B.ENEMIES[e.type] ? B.ENEMIES[e.type].shotCd : 1.8) * (1 - plan.coord * 0.35) / esc; fireEnemyShot(e, dx, dy, 0, esc); }
-        } else {                                              // melee: surround the player AND screen/protect ranged allies
-          const c = plan.coord; let mvx = dx, mvy = dy;
-          let guard = null, gd = 1e9;                         // nearest ranged ally to escort
-          for (const o of enemies) { if (o.ai !== 'shooter') continue; const od = dist(o, e); if (od < gd) { gd = od; guard = o; } }
-          if (guard) {
-            const pgx = player.x - guard.x, pgy = player.y - guard.y, pgd = Math.hypot(pgx, pgy) || 1;
-            const tx = guard.x + pgx / pgd * 64, ty = guard.y + pgy / pgd * 64;   // stand between the player and the shooter
-            const gix = tx - e.x, giy = ty - e.y, gid = Math.hypot(gix, giy) || 1;
-            const protect = 0.5 + 0.4 * c;                    // how hard they commit to guarding (rises with coordination)
-            mvx = dx * (1 - protect) + gix / gid * protect; mvy = dy * (1 - protect) + giy / gid * protect;
-            mvx += -(e.y - guard.y) / (gd || 1) * 0.4 * e.flankDir; mvy += (e.x - guard.x) / (gd || 1) * 0.4 * e.flankDir;  // ring the shooter = surround
+          e.shotCd -= dt; if (e.shotCd <= 0) { e.shotCd = ((B.ENEMIES[e.type] && B.ENEMIES[e.type].shotCd) || 1.8) * (1 - plan.coord * 0.35) / esc; fireEnemyShot(e, dx, dy, 0, esc); }
+        } else {                                              // melee: surround the hero, with an occasional dash lunge
+          e.dashCd -= dt;
+          if (e.dashV && e.dashV.t > 0) { e.x += e.dashV.x * dt; e.y += e.dashV.y * dt; e.dashV.t -= dt; }
+          else if (e.dashCd <= 0 && d < 175 && d > 24) {      // small dash attack toward the hero
+            e.dashV = { x: dx * e.speed * 4.4, y: dy * e.speed * 4.4, t: 0.18 }; e.dashCd = rand(2.2, 3.8) / esc; bSfx('attack');
           } else {
-            mvx += -dy * c * 0.7 * e.flankDir; mvy += dx * c * 0.7 * e.flankDir;   // no one to guard: encircle the player
+            const c = plan.coord; let mvx = dx, mvy = dy;
+            mvx += -dy * (0.6 + 0.5 * c) * e.flankDir; mvy += dx * (0.6 + 0.5 * c) * e.flankDir;   // tangential = ring/surround the hero
+            for (const o of enemies) { if (o === e || o.ai === 'boss') continue; const dd = dist(o, e); if (dd > 0 && dd < 40) { mvx += (e.x - o.x) / dd * (0.6 + c * 0.8); mvy += (e.y - o.y) / dd * (0.6 + c * 0.8); } }
+            const mm = Math.hypot(mvx, mvy) || 1; e.x += mvx / mm * e.speed * esc * dt; e.y += mvy / mm * e.speed * esc * dt;
           }
-          for (const o of enemies) { if (o === e || o.ai === 'boss') continue; const dd = dist(o, e); if (dd > 0 && dd < 40) { mvx += (e.x - o.x) / dd * c * 1.2; mvy += (e.y - o.y) / dd * c * 1.2; } }
-          const mm = Math.hypot(mvx, mvy) || 1; e.x += mvx / mm * e.speed * esc * dt; e.y += mvy / mm * e.speed * esc * dt;
         }
+        if (e.kbt > 0) { e.x += e.kbx * dt; e.y += e.kby * dt; e.kbt -= dt; }   // bounce-back from being hit
         e.x = clamp(e.x, 12, W - 12); e.y = clamp(e.y, 46, H - 12);
         if (d < e.r + player.r && e.hitCd <= 0) { hurtPlayer(e.atk, e.x, e.y); e.hitCd = 0.8 / esc; }   // frenzy = faster melee swings
       }
@@ -238,7 +249,7 @@
 
       // projectiles
       for (const p of projs) { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
-        if (p.team === 'player') { for (const e of enemies) if (dist(p, e) < e.r + 5) { damageEnemy(e, p.dmg); p.life = 0; break; } }
+        if (p.team === 'player') { for (const e of enemies) if (dist(p, e) < e.r + 5) { damageEnemy(e, p.dmg, p.x - p.vx * 0.02, p.y - p.vy * 0.02); p.life = 0; break; } }
         else if (dist(p, player) < player.r + 5) { hurtPlayer(p.dmg, p.x, p.y); p.life = 0; }
       }
       projs = projs.filter(p => p.life > 0 && p.x > -20 && p.x < W + 20 && p.y > -20 && p.y < H + 20);
@@ -434,7 +445,7 @@
     function cleanup() { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); root.classList.remove('on'); root.innerHTML = ''; }
 
     // debug hook (handy for testing; harmless)
-    window.__forgeBattle = () => ({ enemies: enemies.length, state, hearts: player.hearts, maxHearts: player.maxHearts, wave: waveIdx, boss: bossActive, loot: runLoot.length, px: player.x, py: player.y, elapsed, esc: 1 + Math.max(0, elapsed - RAGE_START) / 90, elist: enemies.map(e => ({ x: e.x, y: e.y, ai: e.ai, boss: e.ai === 'boss' })), specials: boss ? boss.specials.length : 0, pProjs: projs.filter(p => p.team === 'player').length });
+    window.__forgeBattle = () => ({ enemies: enemies.length, state, hearts: player.hearts, maxHearts: player.maxHearts, wave: waveIdx, boss: bossActive, loot: runLoot.length, px: player.x, py: player.y, elapsed, esc: 1 + Math.max(0, elapsed - RAGE_START) / 60, blocking: player.blocking, blockT: player.blockT, blockCd: player.blockCd, elist: enemies.map(e => ({ x: e.x, y: e.y, ai: e.ai, type: e.type, kbt: e.kbt })), specials: boss ? boss.specials.length : 0, pProjs: projs.filter(p => p.team === 'player').length });
 
     // intro dialog, then first wave
     showDialog([dialog[0] || 'Ready your weapon.'], startNextWave);
