@@ -122,6 +122,20 @@
             </div>
             <div class="mob-form-actions"><button id="mf-save" class="pixel-btn">Save mob</button><button id="mf-new" class="pixel-btn ghost">clear / new</button></div>
           </div>
+          <h3 class="mobs-h">🎨 Generate sprite (Nano Banana)</h3>
+          <div class="gen-box">
+            <label class="gen-l">Style preamble (editable)
+              <textarea id="gen-style" rows="2"></textarea></label>
+            <label class="gen-l">Creature prompt
+              <textarea id="gen-prompt" rows="2" placeholder="a chunky green slime with tiny angry eyes"></textarea></label>
+            <div class="gen-row">
+              <label class="gen-inline">Frames <input id="gen-frames" type="number" min="1" max="12" value="4"/></label>
+              <button id="gen-run" class="pixel-btn">✨ Generate</button>
+              <button id="gen-clear" class="pixel-btn ghost">remove sprite</button>
+            </div>
+            <div id="gen-status" class="gen-status"></div>
+            <canvas id="gen-preview" width="96" height="96" class="gen-preview"></canvas>
+          </div>
         </div>
       </div>
     </div>

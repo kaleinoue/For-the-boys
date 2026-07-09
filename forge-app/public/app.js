@@ -108,12 +108,59 @@ function renderAdminBar(){
 
 // ---- God Mode: Mob Database -------------------------------------------------
 let mobEditId = null;                                          // id being edited (null = new)
+let mobDraftSprite = null, mobDraftFrames = 4, genPrevTimer = null;   // pending generated sprite for the form
+const STYLE_PREAMBLE = "Flat cartoon video-game sprite, thick dark outline, bright flat colors, chibi proportions, single character, side view, transparent background, no text.";
+const stripInstruction = (n) => ` Output ONE horizontal strip of exactly ${n} evenly-spaced walk-cycle frames of the SAME character, same size and ground line in each frame, transparent background, no gaps or borders.`;
+
+// Compose prompt -> ask the server (Nano Banana, our key) -> slice into an even N-frame strip -> preview + stash.
+async function generateSprite(){
+  if(!hasGemKey()){ $('#gen-status').innerHTML='<span class="lose">Add your Gemini key in the 🔑 panel first.</span>'; return; }
+  const creature = $('#gen-prompt').value.trim();
+  if(!creature){ $('#gen-status').textContent='Describe the creature first.'; return; }
+  const frames = Math.max(1, Math.min(12, +$('#gen-frames').value||4));
+  const prompt = `${$('#gen-style').value.trim()} ${creature}.${stripInstruction(frames)}`;
+  $('#gen-status').innerHTML='<span class="spinner"></span> generating with Nano Banana…';
+  let r;
+  try{ r = await fetch('/api/admin/mobs/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,key:getGemKey(),prompt})}).then(x=>x.json()); }
+  catch(e){ $('#gen-status').innerHTML='<span class="lose">Network error reaching the server.</span>'; return; }
+  if(!r.ok){ $('#gen-status').innerHTML=`<span class="lose">${esc(r.error||'Generation failed.')}</span>`; return; }
+  const strip = await sliceStrip(r.image, frames);
+  if(!strip){ $('#gen-status').innerHTML='<span class="lose">Could not read the generated image.</span>'; return; }
+  mobDraftSprite = strip; mobDraftFrames = frames;
+  $('#gen-status').innerHTML='<span class="ok">✓ Sprite ready — it previews below. Save mob to keep it.</span>'; sfx('win');
+  animatePreview();
+}
+// Normalize the model's image into a clean N-frame strip of fixed square cells (keeps payload tiny + frames aligned).
+function sliceStrip(dataUrl, frames){
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      const CELL=96, fw=Math.max(1, Math.floor(img.width/frames));
+      const c=document.createElement('canvas'); c.width=CELL*frames; c.height=CELL; const g=c.getContext('2d');
+      for(let i=0;i<frames;i++){
+        const scale=Math.min(CELL/fw, CELL/img.height), dw=fw*scale, dh=img.height*scale;
+        g.drawImage(img, i*fw,0,fw,img.height, i*CELL+(CELL-dw)/2, (CELL-dh)/2, dw, dh);
+      }
+      resolve(c.toDataURL('image/png'));
+    };
+    img.onerror=()=>resolve(null);
+    img.src=dataUrl;
+  });
+}
+function stopPreview(){ if(genPrevTimer){ clearInterval(genPrevTimer); genPrevTimer=null; } }
+function animatePreview(){
+  stopPreview();
+  const cv=$('#gen-preview'), g=cv.getContext('2d'); if(!mobDraftSprite){ g.clearRect(0,0,cv.width,cv.height); return; }
+  const img=new Image(); img.src=mobDraftSprite; const n=mobDraftFrames; let fi=0;
+  img.onload=()=>{ const fw=img.width/n; genPrevTimer=setInterval(()=>{ g.clearRect(0,0,cv.width,cv.height); g.drawImage(img, fi*fw,0,fw,img.height, 0,0,cv.width,cv.height); fi=(fi+1)%n; }, 130); };
+}
+function clearSprite(){ mobDraftSprite=null; mobDraftFrames=+($('#gen-frames').value)||4; stopPreview(); const cv=$('#gen-preview'); cv.getContext('2d').clearRect(0,0,cv.width,cv.height); $('#gen-status').textContent='Sprite removed (this mob will use the colored blob).'; }
 function openMobs(){ if(!isGod()) return; mobEditId=null; renderMobs(); $('#mobs-modal').classList.remove('hidden'); }
 function renderMobs(){
   const all = allMobs();
   // roster list
   $('#mob-list').innerHTML = Object.entries(all).map(([id,m])=>{
-    const tag = m.base?'<span class="mob-base">base</span>':'<span class="mob-custom">custom</span>';
+    const tag = (m.base?'<span class="mob-base">base</span>':'<span class="mob-custom">custom</span>')+(m.sprite?' <span class="mob-spr">🎨</span>':'');
     const rng = m.ai==='shooter'?` · 🏹 ${m.shotSpd||180}spd/${m.shotCd||1.7}s`:' · 🗡️ melee';
     return `<div class="mobrow"><span class="mob-dot" style="background:${m.color}"></span>
       <b>${esc(m.name)}</b> <small>[${id}]</small> ${tag}
@@ -148,12 +195,19 @@ function loadMobForm(id){
   $('#mf-speed').value=g('speed',70); $('#mf-r').value=g('r',13); $('#mf-color').value=g('color','#cc8855');
   $('#mf-ai').value=g('ai','chase'); $('#mf-shotcd').value=g('shotCd',1.7); $('#mf-shotspd').value=g('shotSpd',180);
   toggleShooterFields();
+  // sprite / generation fields
+  if(!$('#gen-style').value.trim()) $('#gen-style').value = STYLE_PREAMBLE;
+  mobDraftSprite = g('sprite', null); mobDraftFrames = g('frames', 4);
+  $('#gen-frames').value = mobDraftFrames;
+  $('#gen-status').textContent = mobDraftSprite ? 'This mob has a sprite (preview below).' : '';
+  animatePreview();
 }
 function toggleShooterFields(){ $('#mf-shooter').style.display = $('#mf-ai').value==='shooter'?'':'none'; }
 async function saveMob(){
   const mob = { id:$('#mf-id').value.trim(), name:$('#mf-name').value.trim(), hp:$('#mf-hp').value, atk:$('#mf-atk').value,
     speed:$('#mf-speed').value, r:$('#mf-r').value, color:$('#mf-color').value, ai:$('#mf-ai').value,
     shotCd:$('#mf-shotcd').value, shotSpd:$('#mf-shotspd').value };
+  if(mobDraftSprite){ mob.sprite = mobDraftSprite; mob.frames = mobDraftFrames; }
   if(!mob.id){ alert('Give the mob an id (letters/numbers).'); return; }
   const r = await fetch('/api/admin/mobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,mob})}).then(x=>x.json()).catch(()=>({error:'network'}));
   if(r.error){ alert(r.error); return; }
@@ -339,6 +393,9 @@ function wireChrome(){
   $('#mf-save').onclick = ()=>{ sfx('click'); saveMob(); };
   $('#mf-new').onclick = ()=>{ loadMobForm(null); };
   $('#mf-ai').onchange = ()=> toggleShooterFields();
+  $('#gen-run').onclick = ()=>{ sfx('click'); generateSprite(); };
+  $('#gen-clear').onclick = ()=>{ sfx('click'); clearSprite(); };
+  $('#mobs-modal').addEventListener('click', e=>{ if(e.target.matches('[data-close]')||e.target===$('#mobs-modal')) stopPreview(); });
   $('#btn-apikey').onclick = ()=>{ sfx('click'); openApiKey(); };
   $('#apikey-save').onclick = ()=>{ sfx('click'); saveAndTestKey(); };
   $('#apikey-clear').onclick = ()=>{ sfx('click'); clearKey(); };

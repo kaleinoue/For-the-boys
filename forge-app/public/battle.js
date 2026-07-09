@@ -8,6 +8,15 @@
   const rand = (a, b) => a + Math.random() * (b - a);
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
+  // ---- mob sprite cache: lazily decode data-URL sprite strips, reused across battles ----
+  const SPRITE_CACHE = {};
+  function spriteImg(def) {
+    if (!def || !def.sprite) return null;
+    let im = SPRITE_CACHE[def.sprite];
+    if (!im) { im = new Image(); im.src = def.sprite; SPRITE_CACHE[def.sprite] = im; }
+    return (im.complete && im.naturalWidth) ? im : null;
+  }
+
   // ---- battle sound effects (WebAudio; respects the app's 🔊 mute) ----
   let BAC = null;
   function bAudio() { if (!BAC) { try { BAC = new (window.AudioContext || window.webkitAudioContext)(); } catch {} } if (BAC && BAC.state === 'suspended') BAC.resume(); return BAC; }
@@ -127,7 +136,7 @@
       const hp = Math.round(t.hp * plan.hpScale);
       enemies.push({ type: typeKey, x: p.x, y: p.y, r: t.r, color: t.color, hp, max: hp,
         atk: Math.round(t.atk * plan.atkScale), speed: t.speed, ai: t.ai, hitCd: 0, shotCd: rand(0.5, t.shotCd || 2), shotSpd: t.shotSpd,
-        flankDir: Math.random() < 0.5 ? 1 : -1, dashCd: rand(1.5, 3.2), dashV: null, kbx: 0, kby: 0, kbt: 0 });
+        flankDir: Math.random() < 0.5 ? 1 : -1, dashCd: rand(1.5, 3.2), dashV: null, kbx: 0, kby: 0, kbt: 0, phase: rand(0, 6) });
     }
     function startNextWave() {
       waveIdx++;
@@ -350,6 +359,25 @@
           ctx.beginPath(); ctx.moveTo(x + ex + es * 0.7, y + ey - es * 0.8); ctx.lineTo(x + ex - es * 0.7, y + ey - es * 0.2); ctx.stroke(); ctx.lineCap = 'butt'; }
       }
     }
+    // Draw an animated mob from its sprite strip, with procedural life (bob, squash, facing, dash stretch).
+    function drawSprite(e, img, frames) {
+      shadow(e.x, e.y, e.r);
+      const fw = img.width / frames;
+      const fps = e.dashV ? 15 : 8;                                  // dashing = faster cycle
+      const hold = Math.max(1, Math.round(60 / fps));
+      const fi = Math.floor((aliveFrames + e.phase * 7) / hold) % frames;
+      const size = e.r * 2.7;
+      const bob = Math.sin((aliveFrames + e.phase * 10) / 6) * (e.r * 0.06);
+      let sx = 1, sy = 1;
+      if (e.kbt > 0) { sx = 1.18; sy = 0.82; }                        // squash when knocked back
+      else if (e.dashV && e.dashV.t > 0) { sx = 0.86; sy = 1.16; }    // stretch into a dash lunge
+      const faceLeft = (player.x - e.x) < 0;
+      ctx.save();
+      ctx.translate(e.x, e.y + bob);
+      ctx.scale((faceLeft ? -1 : 1) * sx, sy);
+      ctx.drawImage(img, fi * fw, 0, fw, img.height, -size / 2, -size / 2, size, size);
+      ctx.restore();
+    }
     function render() {
       ctx.save();
       if (shake > 0.3) { ctx.translate(rand(-shake, shake), rand(-shake, shake)); shake *= 0.86; } else shake = 0;
@@ -368,7 +396,9 @@
       }
       // enemies
       for (const e of enemies) {
-        blob(e.x, e.y, e.r, e.color, { eyes: true, dir: { x: player.x - e.x, y: player.y - e.y }, angry: e.type !== 'zap', outline: '#3a1226' });
+        const def = B.ENEMIES[e.type], sp = def && def.sprite ? spriteImg(def) : null;
+        if (sp) drawSprite(e, sp, def.frames || 4);
+        else blob(e.x, e.y, e.r, e.color, { eyes: true, dir: { x: player.x - e.x, y: player.y - e.y }, angry: e.type !== 'zap', outline: '#3a1226' });
         if (e.ai === 'boss') { ctx.fillStyle = '#ffd15c'; const cw = e.r * 0.85, ty = e.y - e.r * 0.92; ctx.beginPath(); ctx.moveTo(e.x - cw, ty); ctx.lineTo(e.x - cw * 0.5, ty - e.r * 0.5); ctx.lineTo(e.x, ty); ctx.lineTo(e.x + cw * 0.5, ty - e.r * 0.5); ctx.lineTo(e.x + cw, ty); ctx.closePath(); ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#a2701a'; ctx.stroke(); }
         if (e.hp < e.max) { const w = e.r * 2.2, bx = e.x - w / 2, by = e.y - e.r - 15, h = 7;
           rr(bx, by, w, h, 4); ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fill();

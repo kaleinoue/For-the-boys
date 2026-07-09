@@ -34,7 +34,9 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const STATE_FILE = path.join(__dirname, 'data', 'progress.json');
 const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
 const MODEL = process.env.FORGE_MODEL || 'gemini-2.0-flash';
+const IMAGE_MODEL = process.env.FORGE_IMAGE_MODEL || 'gemini-2.5-flash-image';  // "Nano Banana"
 const PASS_SCORE = 60;
+const MAX_SPRITE_BYTES = 320 * 1024;  // stored sprite strips are downscaled client-side; cap the payload
 
 // Game Master / admin passcode. Set ADMIN_CODE in your env; defaults otherwise.
 const ADMIN_CODE = process.env.ADMIN_CODE || 'forge-gm';
@@ -51,6 +53,10 @@ function sanitizeMob(m) {
   const def = { name: String(m.name || id).slice(0, 28), hp: num(m.hp, 20, 1, 100000), atk: num(m.atk, 8, 0, 100000),
     speed: num(m.speed, 70, 5, 600), r: num(m.r, 13, 6, 60), color, ai };
   if (ai === 'shooter') { def.shotCd = num(m.shotCd, 1.7, 0.2, 10); def.shotSpd = num(m.shotSpd, 180, 40, 1200); }
+  // Optional animated sprite: a horizontal strip data URL + frame count (walk-cycle from Nano Banana).
+  if (typeof m.sprite === 'string' && m.sprite.startsWith('data:image/') && m.sprite.length <= MAX_SPRITE_BYTES) {
+    def.sprite = m.sprite; def.frames = num(m.frames, 4, 1, 12);
+  }
   return { id, def };
 }
 
@@ -185,6 +191,21 @@ Return ONLY JSON:
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+// Nano Banana image generation. Returns a data URL, or throws with a readable message.
+async function generateImage(prompt, key) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${IMAGE_MODEL}:generateContent?key=${key}`;
+  const res = await fetch(url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } }),
+  });
+  if (!res.ok) { const body = (await res.text()).slice(0, 400); const e = new Error(body); e.status = res.status; throw e; }
+  const data = await res.json();
+  const parts = (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
+  const img = parts.find(p => p.inlineData && p.inlineData.data);
+  if (!img) { const txt = parts.map(p => p.text).filter(Boolean).join(' ').slice(0, 200); const e = new Error(txt || 'Model returned no image.'); e.status = 502; throw e; }
+  return `data:${img.inlineData.mimeType || 'image/png'};base64,${img.inlineData.data}`;
+}
+
 async function callGemini(model, prompt, key) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key || GEMINI_KEY}`;
   return fetch(url, {
@@ -276,6 +297,24 @@ const server = http.createServer(async (req, res) => {
       const cfg = await store.getMobs(); cfg.mobs = cfg.mobs || {}; cfg.mobs[s.id] = s.def;
       await store.putMobs(cfg);
       return sendJson(res, 200, { ok: true, id: s.id, mobs: cfg.mobs, levels: cfg.levels || {} });
+    }
+    if (req.method === 'POST' && url === '/api/admin/mobs/generate') { // Nano Banana sprite generation (uses caller's key)
+      const { code, key, prompt } = await readBody(req);
+      if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
+      const k = (key && String(key).trim()) || GEMINI_KEY;
+      if (!k) return sendJson(res, 400, { error: 'No image key. Paste your Gemini key in the 🔑 panel first.' });
+      if (!prompt || !String(prompt).trim()) return sendJson(res, 400, { error: 'Empty prompt.' });
+      try {
+        const image = await generateImage(String(prompt).slice(0, 2000), k);
+        return sendJson(res, 200, { ok: true, image, model: IMAGE_MODEL });
+      } catch (e) {
+        const status = e.status || 500;
+        const msg = status === 429 ? 'Rate limit hit — wait a moment and try again.'
+          : status === 400 ? 'Image request rejected (bad key, or the model name isn\'t available on this key). ' + String(e.message).slice(0, 160)
+          : status === 404 ? `Image model "${IMAGE_MODEL}" not found for this key. Set FORGE_IMAGE_MODEL to a model you can access.`
+          : String(e.message).slice(0, 200);
+        return sendJson(res, 200, { ok: false, status, error: msg });
+      }
     }
     if (req.method === 'POST' && url === '/api/admin/mobs/delete') {   // remove a custom mob / override
       const { code, id } = await readBody(req);
