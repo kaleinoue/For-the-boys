@@ -168,16 +168,31 @@ async function callGemini(model, prompt, key) {
   });
 }
 
-// Live check: is a Gemini key actually working? Reports the real error. Defaults to the server key.
+// Tell a per-MINUTE rate limit (resets in seconds) from a per-DAY quota (resets midnight PT).
+function classify429(body) {
+  const perDay = /per\s*day|requestsperday|perprojectperday|free[_ ]?tier.*day/i.test(body || '');
+  const m = (body || '').match(/"retryDelay"\s*:\s*"([^"]+)"/);
+  return { limit: perDay ? 'perDay' : 'perMinute', retryDelay: m ? m[1] : null };
+}
+
+// Live check: is a Gemini key actually working? Tries the SAME model fallback grading uses,
+// so a momentary per-minute cap on the primary model doesn't report the key as dead.
 async function geminiPing(key) {
   const k = (key && key.trim()) || GEMINI_KEY;
   if (!k) return { keyPresent: false, ok: false, note: 'No API key set. Add your own in the app (🔑) or set GEMINI_API_KEY on the server.' };
-  try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${k}`;
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }) });
-    if (!res.ok) return { keyPresent: true, ok: false, status: res.status, error: (await res.text()).slice(0, 300) };
-    return { keyPresent: true, ok: true };
-  } catch (e) { return { keyPresent: true, ok: false, error: String(e.message) }; }
+  const models = [...new Set([MODEL, 'gemini-2.0-flash-lite'])];
+  let last = { keyPresent: true, ok: false };
+  for (const model of models) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`;
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }) });
+      if (res.ok) return { keyPresent: true, ok: true, model };
+      const body = (await res.text()).slice(0, 600);
+      last = { keyPresent: true, ok: false, status: res.status, model, ...(res.status === 429 ? classify429(body) : { error: body.slice(0, 300) }) };
+      if (res.status !== 429) break;   // a real error (bad key, etc.) won't differ by model
+    } catch (e) { last = { keyPresent: true, ok: false, error: String(e.message) }; }
+  }
+  return last;
 }
 
 function mockGrade(step, text) {

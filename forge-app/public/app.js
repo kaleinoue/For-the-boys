@@ -238,7 +238,8 @@ async function saveAndTestKey(){
   try{
     const r=await fetch('/api/verify-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})}).then(x=>x.json());
     if(r.ok){ st.innerHTML='<span class="ok">🎉 Working! Your answers now get real AI grading.</span>'; sfx('win'); }
-    else if(r.status===429){ st.innerHTML='<span class="warn">Key works but hit today\'s free limit — try later (resets ~midnight Pacific).</span>'; }
+    else if(r.status===429 && r.limit==='perMinute'){ const w=r.retryDelay?`~${r.retryDelay}`:'about a minute'; st.innerHTML=`<span class="warn">✓ Your key is valid — you just tested too fast. Wait ${w} and it'll grade fine. (Your saved.)</span>`; }
+    else if(r.status===429){ st.innerHTML='<span class="warn">✓ Your key is valid, but its free DAILY limit is used up — resets ~midnight Pacific. It\'s saved; grading works again after the reset.</span>'; }
     else { st.innerHTML=`<span class="lose">That key didn't work${r.status?` (HTTP ${r.status})`:''}. Re-copy it with the copy button and try again.</span>`; }
   }catch(e){ st.innerHTML='<span class="lose">Couldn\'t reach the server to test. Saved anyway — try grading a step.</span>'; }
   updateKeyNudge();
