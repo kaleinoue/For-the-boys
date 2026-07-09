@@ -349,8 +349,11 @@ function openQuest(qid){
 function renderStep(step){
   const prev = stepState(ME, step.id);
   const el = document.createElement('div'); el.className='step';
+  const teach = Array.isArray(step.teach) ? step.teach : (step.teach ? [step.teach] : []);
   el.innerHTML = `<div class="st-top"><span class="st-title">⚔️ ${step.title}</span><span class="st-xp">+${step.xp} XP</span></div>
-    <div class="prompt">${esc(step.prompt)}</div>
+    ${teach.length?`<div class="teach"><div class="teach-h">📖 Lesson</div><ul>${teach.map(t=>`<li>${fmtInline(t)}</li>`).join('')}</ul></div>`:''}
+    <div class="prompt"><div class="prompt-h">✍️ Your task</div>${esc(step.prompt)}</div>
+    ${step.check?`<div class="check">🎯 <b>Pass when:</b> ${fmtInline(step.check)}</div>`:''}
     <textarea placeholder="Write your response, hero...">${prev?esc(prev.response):''}</textarea>
     <div class="st-actions">
       <button class="pixel-btn submit">${prev?.passed?'⚒ RE-ATTEMPT':'⚔ ATTEMPT'}</button>
@@ -460,6 +463,8 @@ function makeEmbers(){ const wrap=$('#embers'); for(let i=0;i<26;i++){ const e=d
   e.style.animationDuration=(6+Math.random()*8)+'s'; e.style.animationDelay=(-Math.random()*10)+'s';
   e.style.opacity=(.2+Math.random()*.5); wrap.appendChild(e);} }
 function esc(s){return (s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+// Lesson text formatter: escape first, then allow **bold** and `code`. Safe (no raw HTML from content).
+function fmtInline(s){ return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+?)`/g,'<code>$1</code>'); }
 
 // ---- procedural sound (WebAudio, no files) ---------------------------------
 let AC=null, MUTED = localStorage.getItem('forge_muted')==='1';

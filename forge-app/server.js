@@ -66,7 +66,8 @@ function publicQuests() {
       id: a.id, title: a.title, theme: a.theme,
       quests: a.quests.map(q => ({
         id: q.id, code: q.code, title: q.title,
-        steps: q.steps.map(s => ({ id: s.id, title: s.title, xp: s.xp, prompt: s.prompt })),
+        // teach (lesson) + check (plain-language pass criteria) are learner-facing; rubric stays hidden.
+        steps: q.steps.map(s => ({ id: s.id, title: s.title, xp: s.xp, teach: s.teach || null, prompt: s.prompt, check: s.check || null })),
       })),
     })),
   };
