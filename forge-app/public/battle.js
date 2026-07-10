@@ -90,8 +90,9 @@
     player.hearts = player.maxHearts;
     let enemies = [], projs = [], loot = [], fx = [];
     let waveIdx = -1, bossActive = false, boss = null, state = 'dialog', dlgQueue = [], runLoot = [], last = 0, raf = 0, aliveFrames = 0, paused = false, shake = 0;
-    let elapsed = 0, raged = false, warned = false;   // active-fight seconds; after RAGE_START the horde escalates (speed/attack/range)
-    const RAGE_START = 60;             // frenzy begins at 60s and steps up every 60s; warning fires 15s before
+    let elapsed = 0, raged = false, warned = false;   // per-wave seconds; resets each wave. After RAGE_START the horde escalates.
+    const RAGE_START = 90;             // frenzy begins at 90s into a wave and steps up every 90s; warning fires 15s before
+    const RAGE_STEP = 90;
 
     // open inventory mid-battle (pauses); resume recomputes stats from new gear
     function openInv() { if (paused || (state !== 'fight' && state !== 'dialog') || !opts.onInventory) return; paused = true; opts.onInventory(resumeFromInv); }
@@ -146,6 +147,7 @@
     }
     function startNextWave() {
       waveIdx++;
+      elapsed = 0; raged = false; warned = false;   // rage timer resets each wave (fresh 90s before frenzy)
       if (waveIdx < plan.waves.length) { plan.waves[waveIdx].forEach(t => spawnEnemy(t)); state = 'fight'; updateWaveLabel(); }
       else { spawnBoss(); }
     }
@@ -243,11 +245,11 @@
       if (press.atk && player.atkCd <= 0) { doAttack(); player.atkCd = cls.cd; }
       press.atk = false;
 
-      // enemies — the horde grows frenzied at RAGE_START and steps up every 60s (faster travel, attack speed, range).
+      // enemies — the horde grows frenzied 90s into a wave and steps up every 90s (faster travel, attack speed, range).
       elapsed += dt;
       if (!warned && elapsed >= RAGE_START - 15) { warned = true; flash('⚠ RAGE INCOMING — 15s', '#ffd15c'); bSfx('shot'); }
       if (!raged && elapsed >= RAGE_START) { raged = true; flash('THE HORDE GROWS FRENZIED!', '#ff5d5d'); bSfx('boss'); }
-      const esc = 1 + Math.max(0, elapsed - RAGE_START) / 60;   // 1x, then climbs uncapped, +1x every 60s
+      const esc = 1 + Math.max(0, elapsed - RAGE_START) / RAGE_STEP;   // 1x, then climbs uncapped, +1x every 90s
       for (const e of enemies) {
         e.hitCd -= dt;
         const d = dist(e, player), dx = (player.x - e.x) / (d || 1), dy = (player.y - e.y) / (d || 1);
@@ -526,7 +528,7 @@
     function cleanup() { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); root.classList.remove('on'); root.innerHTML = ''; }
 
     // debug hook (handy for testing; harmless)
-    window.__forgeBattle = () => ({ enemies: enemies.length, state, hearts: player.hearts, maxHearts: player.maxHearts, wave: waveIdx, boss: bossActive, loot: runLoot.length, px: player.x, py: player.y, elapsed, esc: 1 + Math.max(0, elapsed - RAGE_START) / 60, blocking: player.blocking, blockT: player.blockT, blockCd: player.blockCd, elist: enemies.map(e => ({ x: e.x, y: e.y, ai: e.ai, type: e.type, kbt: e.kbt })), specials: boss ? boss.specials.length : 0, pProjs: projs.filter(p => p.team === 'player').length });
+    window.__forgeBattle = () => ({ enemies: enemies.length, state, hearts: player.hearts, maxHearts: player.maxHearts, wave: waveIdx, boss: bossActive, loot: runLoot.length, px: player.x, py: player.y, elapsed, esc: 1 + Math.max(0, elapsed - RAGE_START) / RAGE_STEP, blocking: player.blocking, blockT: player.blockT, blockCd: player.blockCd, elist: enemies.map(e => ({ x: e.x, y: e.y, ai: e.ai, type: e.type, kbt: e.kbt })), specials: boss ? boss.specials.length : 0, pProjs: projs.filter(p => p.team === 'player').length });
 
     // intro dialog, then first wave
     showDialog([dialog[0] || 'Ready your weapon.'], startNextWave);
