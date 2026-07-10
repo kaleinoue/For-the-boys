@@ -141,7 +141,7 @@
       const hp = Math.round(t.hp * plan.hpScale);
       enemies.push({ type: typeKey, x: p.x, y: p.y, r: t.r, color: t.color, hp, max: hp,
         atk: Math.round(t.atk * plan.atkScale), speed: t.speed, ai: t.ai, hitCd: 0, shotCd: rand(0.5, t.shotCd || 2), shotSpd: t.shotSpd,
-        flankDir: Math.random() < 0.5 ? 1 : -1, dashCd: rand(1.5, 3.2), dashV: null, kbx: 0, kby: 0, kbt: 0, phase: rand(0, 6) });
+        flankDir: Math.random() < 0.5 ? 1 : -1, dashCd: rand(1.5, 3.2), dashV: null, kbx: 0, kby: 0, kbt: 0, phase: rand(0, 6), proj: t.proj });
     }
     function startNextWave() {
       waveIdx++;
@@ -287,7 +287,7 @@
         let tx = player.face.x, ty = player.face.y; // auto-aim nearest for mobile feel
         let near = null, nd = 1e9; for (const e of enemies) { const d = dist(e, player); if (d < nd) { nd = d; near = e; } }
         if (near) { tx = (near.x - player.x) / (nd || 1); ty = (near.y - player.y) / (nd || 1); }
-        projs.push({ x: player.x, y: player.y, vx: tx * 420, vy: ty * 420, life: 1.6, dmg: stats.atk, team: 'player', color: cls.accent });
+        projs.push({ x: player.x, y: player.y, vx: tx * 420, vy: ty * 420, life: 1.6, dmg: stats.atk, team: 'player', color: cls.accent, pdef: B.projForClass(opts.classId) });
         fx.push({ t: 'shot', x: player.x, y: player.y, life: .12 });
       } else if (cls.attack === 'burst') {
         for (const e of [...enemies]) if (dist(e, player) < cls.reach) damageEnemy(e, stats.atk);
@@ -299,7 +299,7 @@
         let tx = player.face.x, ty = player.face.y, near = null, nd = 1e9;   // magic bolt auto-aims nearest
         for (const e of enemies) { const d = dist(e, player); if (d < nd) { nd = d; near = e; } }
         if (near) { tx = (near.x - player.x) / (nd || 1); ty = (near.y - player.y) / (nd || 1); }
-        projs.push({ x: player.x, y: player.y, vx: tx * 460, vy: ty * 460, life: 1.5, dmg: Math.max(1, Math.round(stats.atk * 0.6)), team: 'player', color: cls.accent });
+        projs.push({ x: player.x, y: player.y, vx: tx * 460, vy: ty * 460, life: 1.5, dmg: Math.max(1, Math.round(stats.atk * 0.6)), team: 'player', color: cls.accent, pdef: B.projForClass(opts.classId) });
         fx.push({ t: 'shot', x: player.x, y: player.y, life: .12 });
       } else { // melee arc
         const fa = Math.atan2(player.face.y, player.face.x);
@@ -307,8 +307,8 @@
         fx.push({ t: 'slash', x: player.x, y: player.y, a: fa, reach: cls.reach, arc: cls.arc, life: .18, color: cls.accent });
       }
     }
-    function fireEnemyShot(e, dx, dy, spread, mult) { const m = mult || 1; const a = Math.atan2(dy, dx) + spread; const sp = (e.shotSpd || 180) * m; projs.push({ x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 3 * m, dmg: e.atk, team: 'enemy', color: '#ff88aa' }); }   // mult (frenzy) scales speed AND lifetime = more range
-    function mkEShot(e, ux, uy) { projs.push({ x: e.x, y: e.y, vx: ux * (e.shotSpd || 200), vy: uy * (e.shotSpd || 200), life: 3.2, dmg: e.atk, team: 'enemy', color: '#ff88aa' }); }
+    function fireEnemyShot(e, dx, dy, spread, mult) { const m = mult || 1; const a = Math.atan2(dy, dx) + spread; const sp = (e.shotSpd || 180) * m; projs.push({ x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 3 * m, dmg: e.atk, team: 'enemy', color: '#ff88aa', pdef: B.projById(e.proj) }); }   // mult (frenzy) scales speed AND lifetime = more range
+    function mkEShot(e, ux, uy) { projs.push({ x: e.x, y: e.y, vx: ux * (e.shotSpd || 200), vy: uy * (e.shotSpd || 200), life: 3.2, dmg: e.atk, team: 'enemy', color: '#ff88aa', pdef: B.projById(e.proj) }); }
     // Boss AI: cycles 3 core patterns + fires a random "special" (one more per difficulty level).
     function bossUpdate(e, dt, dx, dy, d) {
       if (e.charge) { e.x += e.charge.x * dt; e.y += e.charge.y * dt; e.charge.t -= dt; if (e.charge.t <= 0) e.charge = null; }
@@ -412,9 +412,18 @@
       }
       // projectiles
       for (const p of projs) {
-        shadow(p.x, p.y, 6); ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, 7); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.beginPath(); ctx.arc(p.x - 2, p.y - 2, 3, 0, 7); ctx.fill();
-        ctx.lineWidth = 2.5; ctx.strokeStyle = p.team === 'enemy' ? '#7a1030' : '#1a3a5a'; ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, 7); ctx.stroke();
+        const pimg = p.pdef ? spriteImg(p.pdef) : null;
+        if (pimg) {                                                    // animated sprite projectile
+          const n = p.pdef.frames || 1, fw = pimg.width / n, fi = Math.floor(aliveFrames / 4) % n, size = p.pdef.size || 16;
+          ctx.save(); ctx.translate(p.x, p.y);
+          ctx.rotate(p.pdef.spin ? aliveFrames * 0.3 : Math.atan2(p.vy, p.vx));   // spin, or point along travel
+          ctx.drawImage(pimg, fi * fw, 0, fw, pimg.height, -size / 2, -size / 2, size, size);
+          ctx.restore();
+        } else {                                                       // default orb
+          shadow(p.x, p.y, 6); ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, 7); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.beginPath(); ctx.arc(p.x - 2, p.y - 2, 3, 0, 7); ctx.fill();
+          ctx.lineWidth = 2.5; ctx.strokeStyle = p.team === 'enemy' ? '#7a1030' : '#1a3a5a'; ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, 7); ctx.stroke();
+        }
       }
       // player
       const flash = player.iframe > 0 && Math.floor(player.iframe * 20) % 2;

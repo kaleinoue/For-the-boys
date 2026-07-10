@@ -57,6 +57,17 @@ function sanitizeMob(m) {
   if (typeof m.sprite === 'string' && m.sprite.startsWith('data:image/') && m.sprite.length <= MAX_SPRITE_BYTES) {
     def.sprite = m.sprite; def.frames = num(m.frames, 4, 1, 12);
   }
+  if (typeof m.proj === 'string' && m.proj) { const pid = m.proj.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24); if (pid) def.proj = pid; }  // projectile type for its shots
+  return { id, def };
+}
+// Validate a shared projectile type (sprite + how it flies).
+function sanitizeProjectile(m) {
+  if (!m || typeof m !== 'object') return null;
+  const id = String(m.id || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
+  if (!id) return null;
+  const num = (v, def, lo, hi) => { v = Number(v); if (!isFinite(v)) v = def; return Math.max(lo, Math.min(hi, Math.round(v * 100) / 100)); };
+  const def = { name: String(m.name || id).slice(0, 28), frames: num(m.frames, 1, 1, 12), spin: !!m.spin, size: num(m.size, 16, 6, 60) };
+  if (typeof m.sprite === 'string' && m.sprite.startsWith('data:image/') && m.sprite.length <= MAX_SPRITE_BYTES) def.sprite = m.sprite;
   return { id, def };
 }
 
@@ -103,7 +114,7 @@ async function sbFetch(pathQuery, opts = {}) {
   return res;
 }
 
-const EMPTY_MOBS = { mobs: {}, levels: {} };
+const EMPTY_MOBS = { mobs: {}, levels: {}, projectiles: {}, classProjectiles: {} };
 const fileStore = {
   async getAll() { try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { return emptyState(); } },
   async putMember(id, member) { const s = await this.getAll(); s.crew[id] = member; fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2)); },
@@ -265,7 +276,7 @@ function decorate(state) {
 }
 
 // ---- request plumbing -------------------------------------------------------
-function sendJson(res, code, obj) { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); }
+function sendJson(res, code, obj) { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); }
 function readBody(req) { return new Promise((resolve) => { let b = ''; req.on('data', c => (b += c)); req.on('end', () => { try { resolve(JSON.parse(b || '{}')); } catch { resolve({}); } }); }); }
 const MIME = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 function serveStatic(req, res) {
@@ -287,7 +298,7 @@ const server = http.createServer(async (req, res) => {
     // ---- Mob database ----
     if (req.method === 'GET' && url === '/api/mobs') {
       const cfg = await store.getMobs();
-      return sendJson(res, 200, { mobs: cfg.mobs || {}, levels: cfg.levels || {} });
+      return sendJson(res, 200, { mobs: cfg.mobs || {}, levels: cfg.levels || {}, projectiles: cfg.projectiles || {}, classProjectiles: cfg.classProjectiles || {} });
     }
     if (req.method === 'POST' && url === '/api/admin/mobs') {          // create / edit a mob
       const { code, mob } = await readBody(req);
@@ -323,6 +334,36 @@ const server = http.createServer(async (req, res) => {
       for (const lv in (cfg.levels || {})) cfg.levels[lv] = (cfg.levels[lv] || []).filter(x => x !== id);
       await store.putMobs(cfg);
       return sendJson(res, 200, { ok: true, mobs: cfg.mobs || {}, levels: cfg.levels || {} });
+    }
+    if (req.method === 'POST' && url === '/api/admin/projectiles') {   // create / edit a shared projectile type
+      const { code, proj } = await readBody(req);
+      if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
+      const s = sanitizeProjectile(proj);
+      if (!s) return sendJson(res, 400, { error: 'Invalid projectile (need at least an id).' });
+      const cfg = await store.getMobs(); cfg.projectiles = cfg.projectiles || {}; cfg.projectiles[s.id] = s.def;
+      await store.putMobs(cfg);
+      return sendJson(res, 200, { ok: true, id: s.id, projectiles: cfg.projectiles, classProjectiles: cfg.classProjectiles || {} });
+    }
+    if (req.method === 'POST' && url === '/api/admin/projectiles/delete') {
+      const { code, id } = await readBody(req);
+      if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
+      const cfg = await store.getMobs();
+      if (cfg.projectiles) delete cfg.projectiles[id];
+      for (const k in (cfg.classProjectiles || {})) if (cfg.classProjectiles[k] === id) delete cfg.classProjectiles[k];
+      for (const mid in (cfg.mobs || {})) if (cfg.mobs[mid] && cfg.mobs[mid].proj === id) delete cfg.mobs[mid].proj;
+      await store.putMobs(cfg);
+      return sendJson(res, 200, { ok: true, projectiles: cfg.projectiles || {}, classProjectiles: cfg.classProjectiles || {}, mobs: cfg.mobs || {} });
+    }
+    if (req.method === 'POST' && url === '/api/admin/projectiles/classassign') {  // give a hero class a projectile
+      const { code, classId, projId } = await readBody(req);
+      if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
+      const cid = String(classId || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
+      if (!cid) return sendJson(res, 400, { error: 'Bad class.' });
+      const cfg = await store.getMobs(); cfg.classProjectiles = cfg.classProjectiles || {};
+      const pid = String(projId || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
+      if (pid) cfg.classProjectiles[cid] = pid; else delete cfg.classProjectiles[cid];
+      await store.putMobs(cfg);
+      return sendJson(res, 200, { ok: true, classProjectiles: cfg.classProjectiles, projectiles: cfg.projectiles || {} });
     }
     if (req.method === 'POST' && url === '/api/admin/mobs/levels') {   // assign which mobs spawn at a level
       const { code, level, mobIds } = await readBody(req);

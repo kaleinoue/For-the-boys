@@ -119,6 +119,7 @@
             <div id="mf-shooter">
               <label>Shot cooldown (s) <input id="mf-shotcd" type="number" step="0.1" min="0.2"/></label>
               <label>Shot speed <input id="mf-shotspd" type="number" min="40"/></label>
+              <label>Projectile <select id="mf-proj"><option value="">default orb</option></select></label>
             </div>
             <div class="mob-form-actions"><button id="mf-save" class="pixel-btn">Save mob</button><button id="mf-new" class="pixel-btn ghost">clear / new</button></div>
           </div>
@@ -142,6 +143,53 @@
             </div>
             <div id="gen-status" class="gen-status"></div>
             <canvas id="gen-preview" width="96" height="96" class="gen-preview"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PROJECTILES (God Mode) ============ -->
+  <div id="proj-modal" class="modal hidden">
+    <div class="modal-card mobs-card">
+      <button class="modal-close" data-close>✕</button>
+      <h2 class="guild-title">🎯 Projectiles</h2>
+      <div class="mobs-grid">
+        <div class="mobs-col">
+          <h3 class="mobs-h">Projectile types</h3>
+          <div id="proj-list"></div>
+          <h3 class="mobs-h">Hero class shots</h3>
+          <div id="proj-classes" class="mlv-checks"></div>
+        </div>
+        <div class="mobs-col">
+          <h3 class="mobs-h" id="proj-form-title">New projectile</h3>
+          <div class="mob-form">
+            <label>ID <input id="pf-id" placeholder="e.g. fireball" autocomplete="off"/></label>
+            <label>Name <input id="pf-name" placeholder="Fireball" autocomplete="off"/></label>
+            <label>Size (px) <input id="pf-size" type="number" min="6" max="60" value="18"/></label>
+            <label class="pf-spin">Spin? <input id="pf-spin" type="checkbox"/> <small>(on = spins; off = points along travel)</small></label>
+            <div class="mob-form-actions"><button id="pf-save" class="pixel-btn">Save projectile</button><button id="pf-new" class="pixel-btn ghost">clear / new</button></div>
+          </div>
+          <h3 class="mobs-h">🎨 Art</h3>
+          <div class="gen-box">
+            <label class="gen-l">Style preamble (editable)
+              <textarea id="pgen-style" rows="3"></textarea></label>
+            <label class="gen-l">Projectile prompt
+              <textarea id="pgen-prompt" rows="2" placeholder="a glowing orange fireball"></textarea></label>
+            <div class="gen-row">
+              <label class="gen-inline">Frames <input id="pgen-frames" type="number" min="1" max="12" value="1"/></label>
+              <label class="gen-inline">As <select id="pgen-mode"><option value="strip">one strip</option><option value="frames">separate frames</option></select></label>
+              <button id="pgen-copy" class="pixel-btn">📋 Build &amp; copy prompt</button>
+            </div>
+            <textarea id="pgen-fullprompt" class="gen-full" rows="3" readonly placeholder="Ready-to-paste prompt appears here — paste into Gemini Pro."></textarea>
+            <div class="gen-import">
+              <span class="gen-hint">Then bring the image in:</span>
+              <label class="pixel-btn gen-file">📁 Import image(s)<input id="pgen-files" type="file" accept="image/*" multiple hidden/></label>
+              <button id="pgen-run" class="pixel-btn ghost">✨ or auto-generate (API key)</button>
+              <button id="pgen-clear" class="pixel-btn ghost">remove</button>
+            </div>
+            <div id="pgen-status" class="gen-status"></div>
+            <canvas id="pgen-preview" width="96" height="96" class="gen-preview"></canvas>
           </div>
         </div>
       </div>

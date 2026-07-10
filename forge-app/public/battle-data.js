@@ -79,10 +79,16 @@ const MYTHIC_BY_CLASS = { zeppelin:'myth_zeppelin', leo:'myth_leo', jonah:'myth_
 // gets merged in here at runtime via setMobConfig().
 const BASE_MOB_IDS = ['grunt', 'zap', 'brute'];
 let LEVEL_MOBS = {};                                   // { levelIndex: [mobId, ...] } — God Mode assignments
+let PROJECTILES = {};                                  // { projId: {name, sprite, frames, spin, size} } shared set
+let CLASS_PROJ = {};                                   // { classId: projId } hero-class shot art
 function setMobConfig(cfg) {                            // called by the app after fetching /api/mobs
   if (cfg && cfg.mobs) for (const id in cfg.mobs) { if (cfg.mobs[id]) ENEMIES[id] = cfg.mobs[id]; }
   LEVEL_MOBS = (cfg && cfg.levels) || {};
+  PROJECTILES = (cfg && cfg.projectiles) || {};
+  CLASS_PROJ = (cfg && cfg.classProjectiles) || {};
 }
+function projById(id) { return (id && PROJECTILES[id]) || null; }
+function projForClass(classId) { return projById(CLASS_PROJ[classId]); }
 function mobPoolFor(level) {                            // which mob ids can spawn at this level
   const assigned = LEVEL_MOBS[level];
   if (Array.isArray(assigned) && assigned.length) { const p = assigned.filter(k => ENEMIES[k]); if (p.length) return p; }
@@ -146,6 +152,6 @@ const QUEST_DIALOG = {
 };
 
 if (typeof window !== 'undefined') {
-  window.BATTLE = { CLASSES, ENEMIES, BASE_MOB_IDS, BOSS, GEAR, TIER_COLOR, DROP_RATES, SCRAP_VALUE, UPGRADE, RARE_OF_SLOT, LEG_MAX_LEVEL, LEG_FODDER_NEED, legLevelGold, itemMods, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, setMobConfig, mobPoolFor, GENERIC_DIALOG, QUEST_DIALOG };
+  window.BATTLE = { CLASSES, ENEMIES, BASE_MOB_IDS, BOSS, GEAR, TIER_COLOR, DROP_RATES, SCRAP_VALUE, UPGRADE, RARE_OF_SLOT, LEG_MAX_LEVEL, LEG_FODDER_NEED, legLevelGold, itemMods, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, setMobConfig, mobPoolFor, projById, projForClass, GENERIC_DIALOG, QUEST_DIALOG };
 }
-if (typeof module !== 'undefined') module.exports = { CLASSES, ENEMIES, BASE_MOB_IDS, BOSS, GEAR, TIER_COLOR, DROP_RATES, SCRAP_VALUE, UPGRADE, RARE_OF_SLOT, LEG_MAX_LEVEL, LEG_FODDER_NEED, legLevelGold, itemMods, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, setMobConfig, mobPoolFor, GENERIC_DIALOG, QUEST_DIALOG };
+if (typeof module !== 'undefined') module.exports = { CLASSES, ENEMIES, BASE_MOB_IDS, BOSS, GEAR, TIER_COLOR, DROP_RATES, SCRAP_VALUE, UPGRADE, RARE_OF_SLOT, LEG_MAX_LEVEL, LEG_FODDER_NEED, legLevelGold, itemMods, NORMAL_LOOT, MYTHIC_BY_CLASS, battlePlan, setMobConfig, mobPoolFor, projById, projForClass, GENERIC_DIALOG, QUEST_DIALOG };

@@ -21,6 +21,12 @@ function allMobs(){
   for(const id in (MOBS.mobs||{})) out[id] = { ...MOBS.mobs[id], base:(B.BASE_MOB_IDS||[]).includes(id) };
   return out;
 }
+// Merge whatever a mob/projectile endpoint returned into MOBS, then push to the engine (never drops other keys).
+function applyCfg(r){
+  if(r.mobs) MOBS.mobs=r.mobs; if(r.levels) MOBS.levels=r.levels;
+  if(r.projectiles) MOBS.projectiles=r.projectiles; if(r.classProjectiles) MOBS.classProjectiles=r.classProjectiles;
+  window.BATTLE.setMobConfig(MOBS);
+}
 const $ = (s) => document.querySelector(s);
 const REGION_COLORS = ['#ff6b1a','#ff4d8d','#8b5cf6','#22c1c3','#e5484d','#ffd15c'];
 
@@ -104,12 +110,14 @@ function renderAdminBar(){
     <label class="gm-actas">Act as: <select id="gm-actas">${opts}</select></label>
     <label class="gm-actas">Test class: <select id="gm-class">${classOpts}</select></label>
     <button id="gm-mobs" class="pixel-btn ghost">🗿 Mob DB</button>
+    <button id="gm-proj" class="pixel-btn ghost">🎯 Projectiles</button>
     <span class="gm-hint">all trials unlocked · pick a Test class to fight with any style</span>
     <button id="gm-logout" class="pixel-btn ghost">exit GM</button>`;
   $('#gm-actas').onchange = (e)=>{ ME = e.target.value; localStorage.setItem('forge_crew_id',ME); renderHUD(); renderMap(); };
   $('#gm-class').onchange = (e)=>{ gmClass = e.target.value; localStorage.setItem('forge_gm_class', gmClass); sfx('click');
     toast(gmClass?`Test class: ${CL[gmClass].name} (${CL[gmClass].klass})`:'Class: profile default'); renderHUD(); };
   $('#gm-mobs').onclick = ()=>{ sfx('click'); openMobs(); };
+  $('#gm-proj').onclick = ()=>{ sfx('click'); openProj(); };
   $('#gm-logout').onclick = logoutGM;
 }
 
@@ -203,15 +211,17 @@ async function stripFromManyImages(dataUrls){         // N images -> one frame e
 }
 function setDraft(res){ mobDraftSprite=res.url; mobDraftFrames=res.frames; $('#gen-frames').value=res.frames; animatePreview(); }
 
-// Import file(s) made in Gemini Pro: 1 file = a strip (sliced by frame count), many files = one frame each.
+// Read file(s) -> a normalized strip. 1 file = a strip (sliced by frame count); many files = one frame each.
+function filesToStrip(files, frames){
+  return Promise.all(files.map(f=>new Promise((r,j)=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.onerror=j; fr.readAsDataURL(f); })))
+    .then(urls => urls.length>1 ? stripFromManyImages(urls) : stripFromOneImage(urls[0], frames));
+}
 function importFiles(fileList){
   const files=[...fileList]; if(!files.length) return;
   $('#gen-status').innerHTML='<span class="spinner"></span> keying + cropping image(s)…';
-  Promise.all(files.map(f=>new Promise((r,j)=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.onerror=j; fr.readAsDataURL(f); })))
-    .then(async urls=>{
-      const res = urls.length>1 ? await stripFromManyImages(urls) : await stripFromOneImage(urls[0], clampFrames());
-      setDraft(res); $('#gen-status').innerHTML=`<span class="ok">✓ Imported ${res.frames} frame(s) — green removed + cropped. Save mob to keep it.</span>`; sfx('win');
-    }).catch(()=>{ $('#gen-status').innerHTML='<span class="lose">Could not read those image(s).</span>'; });
+  filesToStrip(files, clampFrames())
+    .then(res=>{ setDraft(res); $('#gen-status').innerHTML=`<span class="ok">✓ Imported ${res.frames} frame(s) — green removed + cropped. Save mob to keep it.</span>`; sfx('win'); })
+    .catch(()=>{ $('#gen-status').innerHTML='<span class="lose">Could not read those image(s).</span>'; });
 }
 
 // Optional in-app generation with an API key (free tier or pay-as-you-go). Same green-screen prompt + processing.
@@ -273,6 +283,9 @@ function loadMobForm(id){
   $('#mf-name').value = g('name',''); $('#mf-hp').value=g('hp',20); $('#mf-atk').value=g('atk',8);
   $('#mf-speed').value=g('speed',70); $('#mf-r').value=g('r',13); $('#mf-color').value=g('color','#cc8855');
   $('#mf-ai').value=g('ai','chase'); $('#mf-shotcd').value=g('shotCd',1.7); $('#mf-shotspd').value=g('shotSpd',180);
+  // projectile dropdown (shooter's shot art)
+  const P=projList(), curProj=g('proj','');
+  $('#mf-proj').innerHTML = `<option value="">default orb</option>`+Object.entries(P).map(([id,p])=>`<option value="${id}" ${id===curProj?'selected':''}>${esc(p.name)}</option>`).join('');
   toggleShooterFields();
   // sprite / generation fields
   if(!$('#gen-style').value.trim()) $('#gen-style').value = STYLE_PREAMBLE;
@@ -287,24 +300,107 @@ async function saveMob(){
     speed:$('#mf-speed').value, r:$('#mf-r').value, color:$('#mf-color').value, ai:$('#mf-ai').value,
     shotCd:$('#mf-shotcd').value, shotSpd:$('#mf-shotspd').value };
   if(mobDraftSprite){ mob.sprite = mobDraftSprite; mob.frames = mobDraftFrames; }
+  if($('#mf-proj').value) mob.proj = $('#mf-proj').value;
   if(!mob.id){ alert('Give the mob an id (letters/numbers).'); return; }
   const r = await fetch('/api/admin/mobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,mob})}).then(x=>x.json()).catch(()=>({error:'network'}));
   if(r.error){ alert(r.error); return; }
-  MOBS={mobs:r.mobs,levels:r.levels}; window.BATTLE.setMobConfig(MOBS); sfx('win'); toast(`🗿 Saved mob "${r.id}"`); mobEditId=null; loadMobForm(null); renderMobs();
+  applyCfg(r); sfx('win'); toast(`🗿 Saved mob "${r.id}"`); mobEditId=null; loadMobForm(null); renderMobs();
 }
 async function deleteMob(id){
   if(!confirm(`Delete custom mob "${id}"?`)) return;
   const r = await fetch('/api/admin/mobs/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,id})}).then(x=>x.json()).catch(()=>({error:'network'}));
   if(r.error){ alert(r.error); return; }
-  MOBS={mobs:r.mobs,levels:r.levels}; window.BATTLE.setMobConfig(MOBS); sfx('click'); toast(`Deleted "${id}"`); renderMobs();
+  applyCfg(r); sfx('click'); toast(`Deleted "${id}"`); renderMobs();
 }
 async function saveLevelAssign(){
   const lv = +$('#mob-level-pick').value;
   const mobIds = Array.from(document.querySelectorAll('[data-mlv]')).filter(c=>c.checked).map(c=>c.dataset.mlv);
   const r = await fetch('/api/admin/mobs/levels',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,level:lv,mobIds})}).then(x=>x.json()).catch(()=>({error:'network'}));
   if(r.error){ alert(r.error); return; }
-  MOBS={mobs:r.mobs,levels:r.levels}; window.BATTLE.setMobConfig(MOBS); sfx('win'); toast(`Level ${lv} spawns saved`); renderMobs();
+  applyCfg(r); sfx('win'); toast(`Level ${lv} spawns saved`); renderMobs();
 }
+
+// ---- God Mode: Projectiles (shared set, sprite art via same pipeline) -------
+let projEditId=null, projDraftSprite=null, projDraftFrames=1, projPrevTimer=null;
+function projList(){ return MOBS.projectiles || {}; }
+function openProj(){ if(!isGod()) return; projEditId=null; renderProj(); loadProjForm(null); $('#proj-modal').classList.remove('hidden'); }
+function renderProj(){
+  const P=projList();
+  $('#proj-list').innerHTML = Object.entries(P).map(([id,p])=>`<div class="mobrow">
+    <b>${esc(p.name)}</b> <small>[${id}]</small> ${p.sprite?'<span class="mob-spr">🎨</span>':'<span class="mob-custom">no art</span>'}
+    <small>${p.spin?'🌀 spin':'➤ directional'} · ${p.size||16}px · ${p.frames||1}f</small>
+    <span class="mobrow-btns"><button class="pixel-btn ghost" data-pedit="${id}">edit</button><button class="pixel-btn ghost" data-pdel="${id}">✕</button></span></div>`).join('') || '<div class="empty">No projectiles yet — make one on the right.</div>';
+  $('#proj-list').querySelectorAll('[data-pedit]').forEach(b=>b.onclick=()=>loadProjForm(b.dataset.pedit));
+  $('#proj-list').querySelectorAll('[data-pdel]').forEach(b=>b.onclick=()=>deleteProj(b.dataset.pdel));
+  // hero class shots
+  const CL=window.BATTLE.CLASSES, cp=MOBS.classProjectiles||{};
+  const optsFor=(sel)=>`<option value="">— default orb —</option>`+Object.keys(P).map(id=>`<option value="${id}" ${sel===id?'selected':''}>${esc(P[id].name)}</option>`).join('');
+  $('#proj-classes').innerHTML = Object.entries(CL).map(([cid,c])=>`<label class="mlv-check">${esc(c.name)} <select data-classproj="${cid}">${optsFor(cp[cid]||'')}</select></label>`).join('');
+  $('#proj-classes').querySelectorAll('[data-classproj]').forEach(s=>s.onchange=()=>assignClassProj(s.dataset.classproj, s.value));
+}
+function loadProjForm(id){
+  const P=projList(), p=id?P[id]:null; projEditId=id||null; const g=(k,d)=>p&&p[k]!=null?p[k]:d;
+  $('#proj-form-title').textContent=id?`Edit ${id}`:'New projectile';
+  $('#pf-id').value=id||''; $('#pf-id').disabled=!!id;
+  $('#pf-name').value=g('name',''); $('#pf-size').value=g('size',18); $('#pf-spin').checked=!!g('spin',false);
+  if(!$('#pgen-style').value.trim()) $('#pgen-style').value=STYLE_PREAMBLE;
+  projDraftSprite=g('sprite',null); projDraftFrames=g('frames',1); $('#pgen-frames').value=projDraftFrames;
+  $('#pgen-status').textContent = projDraftSprite?'This projectile has art (preview below).':''; projAnimatePreview();
+}
+async function saveProj(){
+  const proj={ id:$('#pf-id').value.trim(), name:$('#pf-name').value.trim(), size:$('#pf-size').value, spin:$('#pf-spin').checked, frames:projDraftFrames };
+  if(projDraftSprite) proj.sprite=projDraftSprite;
+  if(!proj.id){ alert('Give the projectile an id (letters/numbers).'); return; }
+  const r=await fetch('/api/admin/projectiles',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,proj})}).then(x=>x.json()).catch(()=>({error:'network'}));
+  if(r.error){ alert(r.error); return; }
+  applyCfg(r); sfx('win'); toast(`🎯 Saved projectile "${r.id}"`); projEditId=null; loadProjForm(null); renderProj();
+}
+async function deleteProj(id){
+  if(!confirm(`Delete projectile "${id}"? (mobs/classes using it revert to the orb)`)) return;
+  const r=await fetch('/api/admin/projectiles/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,id})}).then(x=>x.json()).catch(()=>({error:'network'}));
+  if(r.error){ alert(r.error); return; }
+  applyCfg(r); sfx('click'); toast(`Deleted "${id}"`); renderProj();
+}
+async function assignClassProj(classId, projId){
+  const r=await fetch('/api/admin/projectiles/classassign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,classId,projId})}).then(x=>x.json()).catch(()=>({error:'network'}));
+  if(r.error){ alert(r.error); return; }
+  applyCfg(r); sfx('click'); toast(`${window.BATTLE.CLASSES[classId].name} shot updated`);
+}
+// projectile sprite studio (own DOM prefix pgen-, shares the processing pipeline)
+const pgFrames=()=>Math.max(1,Math.min(12,+($('#pgen-frames').value)||1));
+function pgCompose(){ return `${$('#pgen-style').value.trim()} ${$('#pgen-prompt').value.trim()}.${frameInstruction(pgFrames(), $('#pgen-mode').value)}`; }
+async function pgCopy(){
+  if(!$('#pgen-prompt').value.trim()){ $('#pgen-status').textContent='Describe the projectile first.'; return; }
+  const full=pgCompose(); $('#pgen-fullprompt').value=full;
+  try{ await navigator.clipboard.writeText(full); $('#pgen-status').innerHTML='<span class="ok">✓ Prompt copied. Make it in Gemini Pro, then Import.</span>'; }
+  catch{ $('#pgen-fullprompt').select(); $('#pgen-status').textContent='Prompt built below — copy it into Gemini Pro, then Import.'; }
+}
+function pgImport(fileList){
+  const files=[...fileList]; if(!files.length) return;
+  $('#pgen-status').innerHTML='<span class="spinner"></span> keying + cropping…';
+  filesToStrip(files, pgFrames()).then(res=>{ projDraftSprite=res.url; projDraftFrames=res.frames; $('#pgen-frames').value=res.frames; projAnimatePreview();
+    $('#pgen-status').innerHTML=`<span class="ok">✓ Imported ${res.frames} frame(s). Save projectile to keep it.</span>`; sfx('win'); })
+    .catch(()=>{ $('#pgen-status').innerHTML='<span class="lose">Could not read those image(s).</span>'; });
+}
+async function pgGenerate(){
+  if(!hasGemKey()){ $('#pgen-status').innerHTML='<span class="lose">No API key — use Import, or add a key in 🔑.</span>'; return; }
+  if(!$('#pgen-prompt').value.trim()){ $('#pgen-status').textContent='Describe the projectile first.'; return; }
+  const frames=pgFrames(), prompt=pgCompose(); $('#pgen-fullprompt').value=prompt;
+  $('#pgen-status').innerHTML='<span class="spinner"></span> generating…';
+  let r; try{ r=await fetch('/api/admin/mobs/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,key:getGemKey(),prompt})}).then(x=>x.json()); }
+  catch{ $('#pgen-status').innerHTML='<span class="lose">Network error.</span>'; return; }
+  if(!r.ok){ $('#pgen-status').innerHTML=`<span class="lose">${esc(r.error||'Generation failed.')}</span>`; return; }
+  const res=await stripFromOneImage(r.image, frames); projDraftSprite=res.url; projDraftFrames=res.frames; $('#pgen-frames').value=res.frames; projAnimatePreview();
+  $('#pgen-status').innerHTML='<span class="ok">✓ Art ready — previews below. Save projectile.</span>'; sfx('win');
+}
+function projStopPreview(){ if(projPrevTimer){ clearInterval(projPrevTimer); projPrevTimer=null; } }
+function projAnimatePreview(){
+  projStopPreview(); const cv=$('#pgen-preview'), g=cv.getContext('2d');
+  if(!projDraftSprite){ g.clearRect(0,0,cv.width,cv.height); return; }
+  loadImg(projDraftSprite).then(img=>{ const n=projDraftFrames||1, fw=img.width/n; let fi=0;
+    projPrevTimer=setInterval(()=>{ g.clearRect(0,0,cv.width,cv.height); g.drawImage(img, fi*fw,0,fw,img.height, 0,0,cv.width,cv.height); fi=(fi+1)%n; }, 130); });
+}
+function projClear(){ projDraftSprite=null; projStopPreview(); $('#pgen-preview').getContext('2d').clearRect(0,0,96,96); $('#pgen-status').textContent='Art removed (this projectile uses the default orb).'; }
 
 // ---- character / inventory (gear affects battle stats) ----
 function battleClass(){
@@ -480,6 +576,13 @@ function wireChrome(){
   $('#gen-run').onclick = ()=>{ sfx('click'); generateSprite(); };
   $('#gen-clear').onclick = ()=>{ sfx('click'); clearSprite(); };
   $('#mobs-modal').addEventListener('click', e=>{ if(e.target.matches('[data-close]')||e.target===$('#mobs-modal')) stopPreview(); });
+  $('#pf-save').onclick = ()=>{ sfx('click'); saveProj(); };
+  $('#pf-new').onclick = ()=>{ loadProjForm(null); };
+  $('#pgen-copy').onclick = ()=>{ sfx('click'); pgCopy(); };
+  $('#pgen-files').onchange = (e)=>{ pgImport(e.target.files); e.target.value=''; };
+  $('#pgen-run').onclick = ()=>{ sfx('click'); pgGenerate(); };
+  $('#pgen-clear').onclick = ()=>{ sfx('click'); projClear(); };
+  $('#proj-modal').addEventListener('click', e=>{ if(e.target.matches('[data-close]')||e.target===$('#proj-modal')) projStopPreview(); });
   $('#btn-apikey').onclick = ()=>{ sfx('click'); openApiKey(); };
   $('#apikey-save').onclick = ()=>{ sfx('click'); saveAndTestKey(); };
   $('#apikey-clear').onclick = ()=>{ sfx('click'); clearKey(); };
