@@ -731,6 +731,7 @@ function renderStep(step){
       STATE = data.state;
       slot.innerHTML=''; slot.appendChild(gradeCard(data.result));
       const r=data.result;
+      if(r.offline){ const bk=$('#btn-apikey'); if(bk) bk.textContent='🔑❗'; toast('⚠ Graded offline — real AI grading didn\'t run. Tap 🔑 to re-test your key.'); }
       el.querySelector('.st-state').innerHTML = r.passed?`<span class="ok">✓ cleared · ${r.xpAwarded} XP</span>`:'not cleared — try again';
       btn.textContent = r.passed?'⚒ RE-ATTEMPT':'⚔ ATTEMPT';
       if(r.passed){

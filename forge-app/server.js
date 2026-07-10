@@ -160,7 +160,7 @@ async function gradeResponse(step, response, userKey) {
     return { passed: false, score: 0, feedback: "Looks empty — give it a real go! Even a rough answer earns feedback.", tip: "Write a few sentences and submit again." };
   // Prefer the player's own key (BYOK, sent per-request, never stored); fall back to a server key if set.
   const key = (userKey && userKey.trim()) || GEMINI_KEY;
-  if (!key) return mockGrade(step, text);
+  if (!key) return mockGrade(step, text, 'No AI key yet — tap 🔑 and Save & Test.');
 
   const prompt =
 `You are the XP Judge for THE FORGE, a fun, gamified AI course where teens (around 18) learn AI while building a video game. Grade the student's response to a task against the rubric. Be ENCOURAGING but fair — reward real effort and understanding, not perfection or length. Speak directly to the student ("you").
@@ -198,7 +198,10 @@ Return ONLY JSON:
     }
   }
   console.error('Grading fell back to mock:', lastErr);
-  return mockGrade(step, text);
+  const note = /429|rate limit/i.test(lastErr) ? 'Your key hit its free limit — wait a bit and re-submit.'
+    : /HTTP 400|API_KEY_INVALID|invalid/i.test(lastErr) ? "Your AI key didn't work — reopen 🔑 and re-paste it with the copy button."
+    : 'AI grader unreachable right now — reopen 🔑 to re-test your key.';
+  return mockGrade(step, text, note);
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -252,15 +255,14 @@ async function geminiPing(key) {
   return last;
 }
 
-function mockGrade(step, text) {
+function mockGrade(step, text, note) {
   const words = text.split(/\s+/).filter(Boolean).length;
   const score = Math.min(100, 30 + words * 4);
   const passed = score >= PASS_SCORE;
+  const tail = note || 'Offline grader — add your Gemini key (🔑) for real AI feedback.';
   return {
-    passed, score,
-    feedback: passed
-      ? `Nice — solid effort (${words} words). (Offline grader: add a GEMINI_API_KEY for real AI feedback.)`
-      : `Good start, but stretch it out and be specific. (Offline grader — add a GEMINI_API_KEY for real AI feedback.)`,
+    passed, score, offline: true,
+    feedback: (passed ? `Nice — solid effort (${words} words). ` : `Good start, but stretch it out and be specific. `) + '(' + tail + ')',
     tip: passed ? 'Add a concrete example to make it bulletproof.' : 'Aim for a few clear sentences that hit every part of the task.',
   };
 }
