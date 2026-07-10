@@ -108,54 +108,105 @@ function renderAdminBar(){
 
 // ---- God Mode: Mob Database -------------------------------------------------
 let mobEditId = null;                                          // id being edited (null = new)
-let mobDraftSprite = null, mobDraftFrames = 4, genPrevTimer = null;   // pending generated sprite for the form
-const STYLE_PREAMBLE = "Flat cartoon video-game sprite, thick dark outline, bright flat colors, chibi proportions, single character, side view, transparent background, no text.";
-const stripInstruction = (n) => ` Output ONE horizontal strip of exactly ${n} evenly-spaced walk-cycle frames of the SAME character, same size and ground line in each frame, transparent background, no gaps or borders.`;
-
-// Compose prompt -> ask the server (Nano Banana, our key) -> slice into an even N-frame strip -> preview + stash.
-async function generateSprite(){
-  if(!hasGemKey()){ $('#gen-status').innerHTML='<span class="lose">Add your Gemini key in the 🔑 panel first.</span>'; return; }
-  const creature = $('#gen-prompt').value.trim();
-  if(!creature){ $('#gen-status').textContent='Describe the creature first.'; return; }
-  const frames = Math.max(1, Math.min(12, +$('#gen-frames').value||4));
-  const prompt = `${$('#gen-style').value.trim()} ${creature}.${stripInstruction(frames)}`;
-  $('#gen-status').innerHTML='<span class="spinner"></span> generating with Nano Banana…';
-  let r;
-  try{ r = await fetch('/api/admin/mobs/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,key:getGemKey(),prompt})}).then(x=>x.json()); }
-  catch(e){ $('#gen-status').innerHTML='<span class="lose">Network error reaching the server.</span>'; return; }
-  if(!r.ok){ $('#gen-status').innerHTML=`<span class="lose">${esc(r.error||'Generation failed.')}</span>`; return; }
-  const strip = await sliceStrip(r.image, frames);
-  if(!strip){ $('#gen-status').innerHTML='<span class="lose">Could not read the generated image.</span>'; return; }
-  mobDraftSprite = strip; mobDraftFrames = frames;
-  $('#gen-status').innerHTML='<span class="ok">✓ Sprite ready — it previews below. Save mob to keep it.</span>'; sfx('win');
-  animatePreview();
+let mobDraftSprite = null, mobDraftFrames = 4, genPrevTimer = null;   // pending sprite for the form
+const CELL = 96;
+// Green-screen style so the model gives us a background we can reliably key out (transparency from image models is unreliable).
+const STYLE_PREAMBLE = "16-bit pixel-art game sprite, flat colors, bold clean black outline, single centered character, side view. CRITICAL: place the character on a SOLID FLAT chroma-key green background, hex #00FF00 — no gradients, no shadows, no lighting on the background. Add a thin white outline around the character so it separates cleanly from the green.";
+const clampFrames = () => Math.max(1, Math.min(12, +($('#gen-frames').value) || 4));
+function frameInstruction(n, mode){
+  return mode === 'frames'
+    ? ` Produce ${n} SEPARATE images, one per walk-cycle frame — the SAME character at the SAME size and ground line in every image.`
+    : ` Output ONE horizontal strip of exactly ${n} evenly-spaced walk-cycle frames of the SAME character, same size and ground line, no gaps or borders.`;
 }
-// Normalize the model's image into a clean N-frame strip of fixed square cells (keeps payload tiny + frames aligned).
-function sliceStrip(dataUrl, frames){
-  return new Promise(resolve=>{
-    const img=new Image();
-    img.onload=()=>{
-      const CELL=96, fw=Math.max(1, Math.floor(img.width/frames));
-      const c=document.createElement('canvas'); c.width=CELL*frames; c.height=CELL; const g=c.getContext('2d');
-      for(let i=0;i<frames;i++){
-        const scale=Math.min(CELL/fw, CELL/img.height), dw=fw*scale, dh=img.height*scale;
-        g.drawImage(img, i*fw,0,fw,img.height, i*CELL+(CELL-dw)/2, (CELL-dh)/2, dw, dh);
-      }
-      resolve(c.toDataURL('image/png'));
-    };
-    img.onerror=()=>resolve(null);
-    img.src=dataUrl;
-  });
+function composePrompt(){ return `${$('#gen-style').value.trim()} ${$('#gen-prompt').value.trim()}.${frameInstruction(clampFrames(), $('#gen-mode').value)}`; }
+
+// ---- Prompt generator: build a ready-to-paste, consistent prompt for Gemini Pro ----
+async function copyPrompt(){
+  if(!$('#gen-prompt').value.trim()){ $('#gen-status').textContent='Describe the creature first.'; return; }
+  const full = composePrompt(); $('#gen-fullprompt').value = full;
+  const mode = $('#gen-mode').value === 'frames' ? `download all ${clampFrames()} images` : 'download the strip image';
+  try{ await navigator.clipboard.writeText(full); $('#gen-status').innerHTML=`<span class="ok">✓ Prompt copied. Paste into Gemini Pro, ${mode}, then Import below.</span>`; }
+  catch{ $('#gen-fullprompt').select(); $('#gen-status').textContent='Prompt built below — copy it, paste into Gemini Pro, then Import.'; }
+}
+
+// ---- image processing: chroma-key green -> alpha, auto-crop to the character, center into equal cells, assemble a strip ----
+function loadImg(src){ return new Promise((res, rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=src; }); }
+function chromaKeyCrop(src){
+  const w=src.naturalWidth||src.width, h=src.naturalHeight||src.height;
+  const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d');
+  g.drawImage(src, 0, 0, w, h);
+  const im=g.getImageData(0,0,w,h), d=im.data;
+  let minx=w, miny=h, maxx=-1, maxy=-1;
+  for(let i=0;i<d.length;i+=4){
+    const r=d[i], gr=d[i+1], b=d[i+2];
+    if(gr>140 && r<140 && b<140 && gr>r*1.3 && gr>b*1.3) d[i+3]=0;        // flat green -> transparent
+    if(d[i+3]>20){ const p=i/4, px=p%w, py=(p/w)|0; if(px<minx)minx=px; if(px>maxx)maxx=px; if(py<miny)miny=py; if(py>maxy)maxy=py; }
+  }
+  g.putImageData(im,0,0);
+  if(maxx<minx) return c;                                                 // nothing left after keying — return as-is
+  const cw=maxx-minx+1, ch=maxy-miny+1;
+  const out=document.createElement('canvas'); out.width=cw; out.height=ch;
+  out.getContext('2d').drawImage(c, minx,miny,cw,ch, 0,0,cw,ch);
+  return out;
+}
+function centerCell(src){
+  const c=document.createElement('canvas'); c.width=CELL; c.height=CELL; const g=c.getContext('2d');
+  const sw=src.width||src.naturalWidth, sh=src.height||src.naturalHeight, s=Math.min(CELL/sw, CELL/sh), dw=sw*s, dh=sh*s;
+  g.drawImage(src, 0,0,sw,sh, (CELL-dw)/2,(CELL-dh)/2, dw,dh);
+  return c;
+}
+function buildStrip(cells){
+  const c=document.createElement('canvas'); c.width=CELL*cells.length; c.height=CELL; const g=c.getContext('2d');
+  cells.forEach((cell,i)=>g.drawImage(cell, i*CELL, 0));
+  return c.toDataURL('image/png');
+}
+async function stripFromOneImage(dataUrl, frames){    // one image (a strip) -> N keyed+cropped cells
+  const img=await loadImg(dataUrl), fw=Math.max(1, Math.floor(img.width/frames)), cells=[];
+  for(let i=0;i<frames;i++){
+    const col=document.createElement('canvas'); col.width=fw; col.height=img.height;
+    col.getContext('2d').drawImage(img, i*fw,0,fw,img.height, 0,0,fw,img.height);
+    cells.push(centerCell(chromaKeyCrop(col)));
+  }
+  return { url: buildStrip(cells), frames };
+}
+async function stripFromManyImages(dataUrls){         // N images -> one frame each (best alignment)
+  const cells=[]; for(const u of dataUrls) cells.push(centerCell(chromaKeyCrop(await loadImg(u))));
+  return { url: buildStrip(cells), frames: cells.length };
+}
+function setDraft(res){ mobDraftSprite=res.url; mobDraftFrames=res.frames; $('#gen-frames').value=res.frames; animatePreview(); }
+
+// Import file(s) made in Gemini Pro: 1 file = a strip (sliced by frame count), many files = one frame each.
+function importFiles(fileList){
+  const files=[...fileList]; if(!files.length) return;
+  $('#gen-status').innerHTML='<span class="spinner"></span> keying + cropping image(s)…';
+  Promise.all(files.map(f=>new Promise((r,j)=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.onerror=j; fr.readAsDataURL(f); })))
+    .then(async urls=>{
+      const res = urls.length>1 ? await stripFromManyImages(urls) : await stripFromOneImage(urls[0], clampFrames());
+      setDraft(res); $('#gen-status').innerHTML=`<span class="ok">✓ Imported ${res.frames} frame(s) — green removed + cropped. Save mob to keep it.</span>`; sfx('win');
+    }).catch(()=>{ $('#gen-status').innerHTML='<span class="lose">Could not read those image(s).</span>'; });
+}
+
+// Optional in-app generation with an API key (free tier or pay-as-you-go). Same green-screen prompt + processing.
+async function generateSprite(){
+  if(!hasGemKey()){ $('#gen-status').innerHTML='<span class="lose">No API key — use Import (make it in Gemini Pro), or add a key in 🔑.</span>'; return; }
+  if(!$('#gen-prompt').value.trim()){ $('#gen-status').textContent='Describe the creature first.'; return; }
+  const frames=clampFrames(), prompt=composePrompt(); $('#gen-fullprompt').value=prompt;
+  $('#gen-status').innerHTML='<span class="spinner"></span> generating with Nano Banana…';
+  let r; try{ r=await fetch('/api/admin/mobs/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,key:getGemKey(),prompt})}).then(x=>x.json()); }
+  catch{ $('#gen-status').innerHTML='<span class="lose">Network error reaching the server.</span>'; return; }
+  if(!r.ok){ $('#gen-status').innerHTML=`<span class="lose">${esc(r.error||'Generation failed.')}</span>`; return; }
+  setDraft(await stripFromOneImage(r.image, frames));
+  $('#gen-status').innerHTML='<span class="ok">✓ Sprite ready — previews below. Save mob to keep it.</span>'; sfx('win');
 }
 function stopPreview(){ if(genPrevTimer){ clearInterval(genPrevTimer); genPrevTimer=null; } }
 function animatePreview(){
-  stopPreview();
-  const cv=$('#gen-preview'), g=cv.getContext('2d'); if(!mobDraftSprite){ g.clearRect(0,0,cv.width,cv.height); return; }
-  const img=new Image(); img.src=mobDraftSprite; const n=mobDraftFrames; let fi=0;
-  img.onload=()=>{ const fw=img.width/n; genPrevTimer=setInterval(()=>{ g.clearRect(0,0,cv.width,cv.height); g.drawImage(img, fi*fw,0,fw,img.height, 0,0,cv.width,cv.height); fi=(fi+1)%n; }, 130); };
+  stopPreview(); const cv=$('#gen-preview'), g=cv.getContext('2d');
+  if(!mobDraftSprite){ g.clearRect(0,0,cv.width,cv.height); return; }
+  loadImg(mobDraftSprite).then(img=>{ const n=mobDraftFrames||1, fw=img.width/n; let fi=0;
+    genPrevTimer=setInterval(()=>{ g.clearRect(0,0,cv.width,cv.height); g.drawImage(img, fi*fw,0,fw,img.height, 0,0,cv.width,cv.height); fi=(fi+1)%n; }, 130); });
 }
-function clearSprite(){ mobDraftSprite=null; mobDraftFrames=+($('#gen-frames').value)||4; stopPreview(); const cv=$('#gen-preview'); cv.getContext('2d').clearRect(0,0,cv.width,cv.height); $('#gen-status').textContent='Sprite removed (this mob will use the colored blob).'; }
-function openMobs(){ if(!isGod()) return; mobEditId=null; renderMobs(); $('#mobs-modal').classList.remove('hidden'); }
+function clearSprite(){ mobDraftSprite=null; stopPreview(); const cv=$('#gen-preview'); cv.getContext('2d').clearRect(0,0,cv.width,cv.height); $('#gen-status').textContent='Sprite removed (this mob will use the colored blob).'; }
+function openMobs(){ if(!isGod()) return; mobEditId=null; renderMobs(); loadMobForm(null); $('#mobs-modal').classList.remove('hidden'); }
 function renderMobs(){
   const all = allMobs();
   // roster list
@@ -393,6 +444,8 @@ function wireChrome(){
   $('#mf-save').onclick = ()=>{ sfx('click'); saveMob(); };
   $('#mf-new').onclick = ()=>{ loadMobForm(null); };
   $('#mf-ai').onchange = ()=> toggleShooterFields();
+  $('#gen-copy').onclick = ()=>{ sfx('click'); copyPrompt(); };
+  $('#gen-files').onchange = (e)=>{ importFiles(e.target.files); e.target.value=''; };
   $('#gen-run').onclick = ()=>{ sfx('click'); generateSprite(); };
   $('#gen-clear').onclick = ()=>{ sfx('click'); clearSprite(); };
   $('#mobs-modal').addEventListener('click', e=>{ if(e.target.matches('[data-close]')||e.target===$('#mobs-modal')) stopPreview(); });

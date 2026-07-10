@@ -122,16 +122,23 @@
             </div>
             <div class="mob-form-actions"><button id="mf-save" class="pixel-btn">Save mob</button><button id="mf-new" class="pixel-btn ghost">clear / new</button></div>
           </div>
-          <h3 class="mobs-h">🎨 Generate sprite (Nano Banana)</h3>
+          <h3 class="mobs-h">🎨 Sprite</h3>
           <div class="gen-box">
             <label class="gen-l">Style preamble (editable)
-              <textarea id="gen-style" rows="2"></textarea></label>
+              <textarea id="gen-style" rows="3"></textarea></label>
             <label class="gen-l">Creature prompt
               <textarea id="gen-prompt" rows="2" placeholder="a chunky green slime with tiny angry eyes"></textarea></label>
             <div class="gen-row">
               <label class="gen-inline">Frames <input id="gen-frames" type="number" min="1" max="12" value="4"/></label>
-              <button id="gen-run" class="pixel-btn">✨ Generate</button>
-              <button id="gen-clear" class="pixel-btn ghost">remove sprite</button>
+              <label class="gen-inline">As <select id="gen-mode"><option value="strip">one strip</option><option value="frames">separate frames</option></select></label>
+              <button id="gen-copy" class="pixel-btn">📋 Build &amp; copy prompt</button>
+            </div>
+            <textarea id="gen-fullprompt" class="gen-full" rows="3" readonly placeholder="Your ready-to-paste prompt appears here — paste it into Gemini Pro (your subscription)."></textarea>
+            <div class="gen-import">
+              <span class="gen-hint">Then bring the image in:</span>
+              <label class="pixel-btn gen-file">📁 Import image(s)<input id="gen-files" type="file" accept="image/*" multiple hidden/></label>
+              <button id="gen-run" class="pixel-btn ghost">✨ or auto-generate (API key)</button>
+              <button id="gen-clear" class="pixel-btn ghost">remove</button>
             </div>
             <div id="gen-status" class="gen-status"></div>
             <canvas id="gen-preview" width="96" height="96" class="gen-preview"></canvas>
