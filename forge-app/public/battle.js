@@ -84,7 +84,8 @@
 
     // ---- state ----
     const HEART_HP = 22;
-    const player = { x: W / 2, y: H * 0.7, r: 14, maxHearts: Math.max(3, Math.round(stats.hp / HEART_HP)), face: { x: 0, y: -1 },
+    const bonusHearts = opts.bonusHearts || 0;   // permanent hearts earned from first boss kills
+    const player = { x: W / 2, y: H * 0.7, r: 14, maxHearts: Math.max(3, Math.round(stats.hp / HEART_HP)) + bonusHearts, face: { x: 0, y: -1 },
       atkCd: 0, dodgeCd: 0, iframe: 0, blocking: false, dashV: null, blockT: 0, blockCd: 0, kbx: 0, kby: 0, kbt: 0 };
     player.hearts = player.maxHearts;
     let enemies = [], projs = [], loot = [], fx = [];
@@ -96,7 +97,7 @@
     function openInv() { if (paused || (state !== 'fight' && state !== 'dialog') || !opts.onInventory) return; paused = true; opts.onInventory(resumeFromInv); }
     function resumeFromInv(newEquipped, newLevels) {
       paused = false;
-      if (newEquipped) { const old = player.maxHearts; stats = statsFor(opts.classId, newEquipped, newLevels); player.maxHearts = Math.max(3, Math.round(stats.hp / HEART_HP)); player.hearts = clamp(player.hearts + Math.max(0, player.maxHearts - old), 0.25, player.maxHearts); }
+      if (newEquipped) { const old = player.maxHearts; stats = statsFor(opts.classId, newEquipped, newLevels); player.maxHearts = Math.max(3, Math.round(stats.hp / HEART_HP)) + bonusHearts; player.hearts = clamp(player.hearts + Math.max(0, player.maxHearts - old), 0.25, player.maxHearts); }
     }
 
     // ---- input ----
@@ -141,7 +142,7 @@
       const hp = Math.round(t.hp * plan.hpScale);
       enemies.push({ type: typeKey, x: p.x, y: p.y, r: t.r, color: t.color, hp, max: hp,
         atk: Math.round(t.atk * plan.atkScale), speed: t.speed, ai: t.ai, hitCd: 0, shotCd: rand(0.5, t.shotCd || 2), shotSpd: t.shotSpd,
-        flankDir: Math.random() < 0.5 ? 1 : -1, dashCd: rand(1.5, 3.2), dashV: null, kbx: 0, kby: 0, kbt: 0, phase: rand(0, 6), proj: t.proj });
+        flankDir: Math.random() < 0.5 ? 1 : -1, dashCd: rand(1.5, 3.2), dashV: null, kbx: 0, kby: 0, kbt: 0, phase: rand(0, 6), proj: t.proj, power: t.power || 1 });
     }
     function startNextWave() {
       waveIdx++;
@@ -153,30 +154,43 @@
       const hp = Math.round(B.BOSS.hp * (1 + plan.level * 0.16));
       boss = { type: 'boss', x: W / 2, y: 80, r: B.BOSS.r, color: B.BOSS.color, hp, max: hp,
         atk: Math.round(B.BOSS.atk * (1 + plan.level * 0.12)), speed: B.BOSS.speed, ai: 'boss', hitCd: 0, shotSpd: B.BOSS.shotSpd,
-        core: ['spread', 'charge', 'ring'], coreIdx: 0, actCd: 1.2, doSpecial: false, charge: null, burst: null,
+        core: ['spread', 'charge', 'ring'], coreIdx: 0, actCd: 1.2, doSpecial: false, charge: null, burst: null, power: B.BOSS.power || 2,
         specials: ['aimed', 'summon', 'cross', 'spiral', 'nova'].slice(0, Math.min(5, plan.level)) };  // +1 random special per level
       enemies.push(boss); bossWrap.classList.add('on'); state = 'fight'; waveEl.textContent = '☠ BOSS'; bSfx('boss'); }
     function updateWaveLabel() { waveEl.textContent = `Wave ${waveIdx + 1}/${plan.waves.length}`; }
 
     // ---- combat helpers ----
-    function hurtPlayer(dmg, sx, sy) {
+    // atk = attacker power (scales with level); armor counters it; power = base heart cost (1 light / 2 heavy).
+    function hurtPlayer(atk, power, sx, sy) {
       if (player.iframe > 0) return;                 // dodging / just-hit i-frames = no damage (misses never call this)
-      let hearts = 1, label = '-1';                  // clean hit = 1 heart
+      const armor = stats.armor || 0;
+      let hearts = (power || 1) * (atk / (atk + armor));   // ARMOR COUNTERS POWER
+      let blocked = false;
       if (player.blocking) {
-        // hit is "front" if the attacker is in the direction the player faces
         let ax = (sx != null ? sx - player.x : -player.face.x), ay = (sy != null ? sy - player.y : -player.face.y);
         const m = Math.hypot(ax, ay) || 1; const front = ((ax / m) * player.face.x + (ay / m) * player.face.y) > 0;
-        hearts = front ? 0.25 : 0.5; label = front ? '-¼' : '-½';
+        hearts *= front ? 0.25 : 0.5; blocked = true;      // block front ¼ / back ½
       }
+      hearts = Math.max(0.25, Math.round(hearts * 4) / 4);  // snap to quarter-hearts, min ¼ on a connect
       player.hearts = Math.max(0, Math.round((player.hearts - hearts) * 4) / 4);
       player.iframe = 0.5; shake = Math.min(12, shake + (hearts >= 1 ? 8 : 4)); bSfx('hurt');
-      if (sx != null) knock(player, sx, sy, player.blocking ? 120 : 300);   // clean hits shove you back harder than blocked ones
-      fx.push({ t: 'dmg', x: player.x, y: player.y, life: .8, text: label });   // floats over the head
+      const frac = hearts === 0.25 ? '¼' : hearts === 0.5 ? '½' : hearts === 0.75 ? '¾' : (Number.isInteger(hearts) ? String(hearts) : hearts.toFixed(2));
+      fx.push({ t: 'dmg', x: player.x, y: player.y, life: .8, text: (blocked ? '🛡 ' : '') + '-' + frac });   // floats over the head
       if (player.hearts <= 0) lose();
+    }
+    // Mob dodge: chance rises with engagement RANGE and LEVEL; the player's `hit` stat cancels it. Bosses never dodge.
+    function tryHit(e, dmg, sx, sy) {
+      if (e.ai !== 'boss') {
+        const d = dist(e, player);
+        let dodge = 0.02 + d * 0.0005 + plan.level * 0.02 - (stats.hit || 0);
+        dodge = Math.max(0, Math.min(0.4, dodge));
+        if (Math.random() < dodge) { fx.push({ t: 'dmg', x: e.x, y: e.y - e.r - 4, life: .5, text: 'miss' }); return; }
+      }
+      damageEnemy(e, dmg, sx, sy);
     }
     function damageEnemy(e, dmg, sx, sy) {
       e.hp -= dmg; fx.push({ t: 'spark', x: e.x, y: e.y, life: .15 }); bSfx('deal');
-      knock(e, sx != null ? sx : player.x, sy != null ? sy : player.y, 300);   // hits bounce enemies back
+      // knockback intentionally NOT applied on hit (kept as a mechanic for future gear via knock())
       if (e.hp <= 0) { killEnemy(e); }
     }
     function killEnemy(e) {
@@ -257,14 +271,34 @@
         }
         if (e.kbt > 0) { e.x += e.kbx * dt; e.y += e.kby * dt; e.kbt -= dt; }   // bounce-back from being hit
         e.x = clamp(e.x, 12, W - 12); e.y = clamp(e.y, 46, H - 12);
-        if (d < e.r + player.r && e.hitCd <= 0) { hurtPlayer(e.atk, e.x, e.y); e.hitCd = 0.8 / esc; }   // frenzy = faster melee swings
+        if (d < e.r + player.r && e.hitCd <= 0) { hurtPlayer(e.atk, e.power || 1, e.x, e.y); e.hitCd = 0.8 / esc; }   // frenzy = faster melee swings
       }
+      // ---- collision resolution: no overlap/stacking; player contact = a small bounce ----
+      for (let i = 0; i < enemies.length; i++) {
+        const a = enemies[i];
+        // vs other enemies (separate so they never stack); bosses don't get shoved
+        for (let j = i + 1; j < enemies.length; j++) {
+          const bb = enemies[j], dd = dist(a, bb), mn = a.r + bb.r;
+          if (dd > 0 && dd < mn) { const ux = (a.x - bb.x) / dd, uy = (a.y - bb.y) / dd, push = mn - dd;
+            if (a.ai !== 'boss') { a.x += ux * push * (bb.ai === 'boss' ? 1 : 0.5); a.y += uy * push * (bb.ai === 'boss' ? 1 : 0.5); }
+            if (bb.ai !== 'boss') { bb.x -= ux * push * (a.ai === 'boss' ? 1 : 0.5); bb.y -= uy * push * (a.ai === 'boss' ? 1 : 0.5); } }
+        }
+        // vs player: push the enemy out and give the player a small bounce (uses the kept knock mechanic)
+        const pd = dist(a, player), minP = a.r + player.r;
+        if (pd > 0 && pd < minP) { const ux = (a.x - player.x) / pd, uy = (a.y - player.y) / pd, push = minP - pd;
+          if (a.ai !== 'boss') { a.x += ux * push * 0.75; a.y += uy * push * 0.75; }
+          player.x -= ux * push * 0.25; player.y -= uy * push * 0.25;
+          if (player.kbt <= 0) knock(player, a.x, a.y, 90);   // small bounce
+        }
+        a.x = clamp(a.x, 12, W - 12); a.y = clamp(a.y, 46, H - 12);
+      }
+      player.x = clamp(player.x, 16, W - 16); player.y = clamp(player.y, 60, H - 16);
       if (boss) bossFill.style.width = clamp(boss.hp / boss.max * 100, 0, 100) + '%';
 
       // projectiles
       for (const p of projs) { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
-        if (p.team === 'player') { for (const e of enemies) if (dist(p, e) < e.r + 5) { damageEnemy(e, p.dmg, p.x - p.vx * 0.02, p.y - p.vy * 0.02); p.life = 0; break; } }
-        else if (dist(p, player) < player.r + 5) { hurtPlayer(p.dmg, p.x, p.y); p.life = 0; }
+        if (p.team === 'player') { for (const e of enemies) if (dist(p, e) < e.r + 5) { tryHit(e, p.dmg, p.x - p.vx * 0.02, p.y - p.vy * 0.02); p.life = 0; break; } }
+        else if (dist(p, player) < player.r + 5) { hurtPlayer(p.dmg, p.power || 1, p.x, p.y); p.life = 0; }
       }
       projs = projs.filter(p => p.life > 0 && p.x > -20 && p.x < W + 20 && p.y > -20 && p.y < H + 20);
 
@@ -290,11 +324,11 @@
         projs.push({ x: player.x, y: player.y, vx: tx * 420, vy: ty * 420, life: 1.6, dmg: stats.atk, team: 'player', color: cls.accent, pdef: B.projForClass(opts.classId) });
         fx.push({ t: 'shot', x: player.x, y: player.y, life: .12 });
       } else if (cls.attack === 'burst') {
-        for (const e of [...enemies]) if (dist(e, player) < cls.reach) damageEnemy(e, stats.atk);
+        for (const e of [...enemies]) if (dist(e, player) < cls.reach) tryHit(e, stats.atk);
         fx.push({ t: 'burst', x: player.x, y: player.y, r: cls.reach, life: .25, color: cls.accent });
       } else if (cls.attack === 'spellblade') {   // dual: melee arc up close + a homing magic bolt at range
         const fa = Math.atan2(player.face.y, player.face.x);
-        for (const e of [...enemies]) { const d = dist(e, player); if (d > cls.reach + e.r) continue; const ea = Math.atan2(e.y - player.y, e.x - player.x); let diff = Math.abs(ea - fa); if (diff > Math.PI) diff = 2 * Math.PI - diff; if (diff < cls.arc / 2) damageEnemy(e, stats.atk); }
+        for (const e of [...enemies]) { const d = dist(e, player); if (d > cls.reach + e.r) continue; const ea = Math.atan2(e.y - player.y, e.x - player.x); let diff = Math.abs(ea - fa); if (diff > Math.PI) diff = 2 * Math.PI - diff; if (diff < cls.arc / 2) tryHit(e, stats.atk); }
         fx.push({ t: 'slash', x: player.x, y: player.y, a: fa, reach: cls.reach, arc: cls.arc, life: .18, color: cls.accent });
         let tx = player.face.x, ty = player.face.y, near = null, nd = 1e9;   // magic bolt auto-aims nearest
         for (const e of enemies) { const d = dist(e, player); if (d < nd) { nd = d; near = e; } }
@@ -303,12 +337,12 @@
         fx.push({ t: 'shot', x: player.x, y: player.y, life: .12 });
       } else { // melee arc
         const fa = Math.atan2(player.face.y, player.face.x);
-        for (const e of [...enemies]) { const d = dist(e, player); if (d > cls.reach + e.r) continue; const ea = Math.atan2(e.y - player.y, e.x - player.x); let diff = Math.abs(ea - fa); if (diff > Math.PI) diff = 2 * Math.PI - diff; if (diff < cls.arc / 2) damageEnemy(e, stats.atk); }
+        for (const e of [...enemies]) { const d = dist(e, player); if (d > cls.reach + e.r) continue; const ea = Math.atan2(e.y - player.y, e.x - player.x); let diff = Math.abs(ea - fa); if (diff > Math.PI) diff = 2 * Math.PI - diff; if (diff < cls.arc / 2) tryHit(e, stats.atk); }
         fx.push({ t: 'slash', x: player.x, y: player.y, a: fa, reach: cls.reach, arc: cls.arc, life: .18, color: cls.accent });
       }
     }
-    function fireEnemyShot(e, dx, dy, spread, mult) { const m = mult || 1; const a = Math.atan2(dy, dx) + spread; const sp = (e.shotSpd || 180) * m; projs.push({ x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 3 * m, dmg: e.atk, team: 'enemy', color: '#ff88aa', pdef: B.projById(e.proj) }); }   // mult (frenzy) scales speed AND lifetime = more range
-    function mkEShot(e, ux, uy) { projs.push({ x: e.x, y: e.y, vx: ux * (e.shotSpd || 200), vy: uy * (e.shotSpd || 200), life: 3.2, dmg: e.atk, team: 'enemy', color: '#ff88aa', pdef: B.projById(e.proj) }); }
+    function fireEnemyShot(e, dx, dy, spread, mult) { const m = mult || 1; const a = Math.atan2(dy, dx) + spread; const sp = (e.shotSpd || 180) * m; projs.push({ x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 3 * m, dmg: e.atk, power: e.power || 1, team: 'enemy', color: '#ff88aa', pdef: B.projById(e.proj) }); }   // mult (frenzy) scales speed AND lifetime = more range
+    function mkEShot(e, ux, uy) { projs.push({ x: e.x, y: e.y, vx: ux * (e.shotSpd || 200), vy: uy * (e.shotSpd || 200), life: 3.2, dmg: e.atk, power: e.power || 1, team: 'enemy', color: '#ff88aa', pdef: B.projById(e.proj) }); }
     // Boss AI: cycles 3 core patterns + fires a random "special" (one more per difficulty level).
     function bossUpdate(e, dt, dx, dy, d) {
       if (e.charge) { e.x += e.charge.x * dt; e.y += e.charge.y * dt; e.charge.t -= dt; if (e.charge.t <= 0) e.charge = null; }
@@ -446,9 +480,12 @@
       }
     }
     function drawFx(f) {
-      if (f.t === 'slash') { ctx.globalAlpha = Math.min(1, f.life * 5); ctx.lineCap = 'round';
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 9; ctx.beginPath(); ctx.arc(f.x, f.y, f.reach * 0.9, f.a - f.arc / 2, f.a + f.arc / 2); ctx.stroke();
-        ctx.strokeStyle = f.color; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(f.x, f.y, f.reach * 0.9, f.a - f.arc / 2, f.a + f.arc / 2); ctx.stroke(); ctx.lineCap = 'butt'; ctx.globalAlpha = 1; }
+      if (f.t === 'slash') { ctx.globalAlpha = Math.min(1, f.life * 5);   // filled CONE (pie wedge) matching the hit area
+        const R = f.reach + 8, a0 = f.a - f.arc / 2, a1 = f.a + f.arc / 2;
+        ctx.fillStyle = f.color; ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.arc(f.x, f.y, R, a0, a1); ctx.closePath(); ctx.globalAlpha = Math.min(1, f.life * 5) * 0.35; ctx.fill();
+        ctx.globalAlpha = Math.min(1, f.life * 5); ctx.lineCap = 'round';
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(f.x, f.y, R, a0, a1); ctx.stroke();
+        ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.x + Math.cos(a0) * R, f.y + Math.sin(a0) * R); ctx.moveTo(f.x, f.y); ctx.lineTo(f.x + Math.cos(a1) * R, f.y + Math.sin(a1) * R); ctx.stroke(); ctx.lineCap = 'butt'; ctx.globalAlpha = 1; }
       else if (f.t === 'burst') { ctx.globalAlpha = Math.min(1, f.life * 4); ctx.strokeStyle = '#fff'; ctx.lineWidth = 7; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * (1 - f.life * 2.2), 0, 7); ctx.stroke(); ctx.strokeStyle = f.color; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * (1 - f.life * 2.2), 0, 7); ctx.stroke(); ctx.globalAlpha = 1; }
       else if (f.t === 'pop') { ctx.globalAlpha = Math.min(1, f.life * 3); ctx.fillStyle = f.color; const rrad = 24 * (1 - f.life * 3); for (let i = 0; i < 8; i++) { const a = i / 8 * 7; ctx.beginPath(); ctx.arc(f.x + Math.cos(a) * rrad, f.y + Math.sin(a) * rrad, 4.5, 0, 7); ctx.fill(); } ctx.globalAlpha = 1; }
       else if (f.t === 'hit') { ctx.globalAlpha = Math.min(1, f.life * 4); ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(f.x, f.y, 22 * (1 - f.life * 4) + 6, 0, 7); ctx.stroke(); ctx.globalAlpha = 1; }

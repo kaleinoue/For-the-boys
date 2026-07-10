@@ -407,7 +407,7 @@ function battleClass(){
   if(isGod() && gmClass && window.BATTLE.CLASSES[gmClass]) return gmClass;   // God Mode class-style override (test any class)
   return (ME && ME!=='gm') ? ME : 'zeppelin';
 }
-function profileOf(id){ const p = STATE.crew[id]?.steps?.__profile; return { inventory:(p&&p.inventory)||[], equipped:(p&&p.equipped)||{}, battles:(p&&p.battles)||{}, gold:(p&&p.gold)||0, levels:(p&&p.levels)||{} }; }
+function profileOf(id){ const p = STATE.crew[id]?.steps?.__profile; return { inventory:(p&&p.inventory)||[], equipped:(p&&p.equipped)||{}, battles:(p&&p.battles)||{}, gold:(p&&p.gold)||0, levels:(p&&p.levels)||{}, bonusHearts:(p&&p.bonusHearts)||0 }; }
 function computeStats(id){
   const B=window.BATTLE, base={...B.CLASSES[battleClass()].base}, prof=profileOf(id);
   for(const slot in prof.equipped){ const iid=prof.equipped[slot]; if(!B.GEAR[iid])continue; const mods=B.itemMods(iid,(prof.levels[iid])||0); for(const k in mods) base[k]=(base[k]||0)+mods[k]; }
@@ -440,8 +440,9 @@ function renderGear(){
       return `<div class="invrow"><button class="item" ${locked?'disabled':`data-eq="${id}" data-slot="${g.slot}"`} style="border-color:${TC[g.tier]};color:${TC[g.tier]}">${nm}${n>1?` ×${n}`:''} <small>[${g.slot} · ${mods}]</small>${locked?' 🔒':''}</button>${upBtn}${sv?`<button class="scrap" data-scrap="${id}" title="scrap for gold">♻ ${sv}g</button>`:''}</div>`; }).join('') || '<div class="empty">No gear yet — win battles to loot some.</div>';
   $('#gear-body').innerHTML = `
     <div class="statgrid">
-      <div>❤ Hearts <b>${Math.max(3,Math.round(st.hp/22))}</b></div><div>⚔ Attack <b>${st.atk}</b></div>
-      <div>🛡 Armor <b>${st.armor}</b></div><div>👟 Speed <b>${st.speed}</b></div>
+      <div>❤ Hearts <b>${Math.max(3,Math.round(st.hp/22))+(prof.bonusHearts||0)}</b>${prof.bonusHearts?` <small>(+${prof.bonusHearts} boss)</small>`:''}</div><div>⚔ Attack <b>${st.atk}</b></div>
+      <div>🛡 Armor <b>${st.armor||0}</b></div><div>👟 Speed <b>${st.speed}</b></div>
+      <div>🎯 Hit <b>${Math.round(((st.hit||0))*100)}%</b></div><div>🗡️ vs dodge</div>
     </div>
     <div class="goldline">💰 <b>${prof.gold||0}</b> gold <button id="sell-all" class="pixel-btn ghost">Sell all junk</button></div>
     <h3 class="sub">Equipped</h3>${slotHtml}
@@ -490,11 +491,11 @@ function launchBattle(){
   const qi=Math.min(16, Object.keys(prof.battles).length);   // difficulty grows as you clear
   stopMusic();
   const hasMythic = prof.inventory.includes(window.BATTLE.MYTHIC_BY_CLASS[battleClass()]);
-  window.ForgeBattle.start({ classId: battleClass(), questIndex: qi, equipped: prof.equipped, levels: prof.levels, hasMythic,
+  window.ForgeBattle.start({ classId: battleClass(), questIndex: qi, equipped: prof.equipped, levels: prof.levels, hasMythic, bonusHearts: prof.bonusHearts,
     onWin: async (res)=>{
       const d=await fetch('/api/battle/win',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({crewId:ME,questId:'train'+qi,xp:res.xp,loot:res.loot})}).then(r=>r.json());
-      if(d.state) STATE=d.state; renderHUD(); renderMap();
+      if(d.state) STATE=d.state; if(d.gotHeart) toast(`❤ Permanent heart! Max hearts now ${d.bonusHearts} higher.`); renderHUD(); renderMap();
     },
     onContinue: (res)=>{ startMusic(); toast(`+${res.xp} XP · ${res.loot.length} loot — check 🎒 GEAR`); },
     onInventory: (resume)=>openInventoryOverlay(resume),
@@ -512,11 +513,11 @@ function launchQuestBattle(qid){
   const dialog = (window.BATTLE.QUEST_DIALOG && window.BATTLE.QUEST_DIALOG[qid]) || window.BATTLE.GENERIC_DIALOG;
   const prof = profileOf(ME); stopMusic();
   const hasMythic = prof.inventory.includes(window.BATTLE.MYTHIC_BY_CLASS[battleClass()]);
-  window.ForgeBattle.start({ classId: battleClass(), questIndex: idx, equipped: prof.equipped, levels: prof.levels, dialog, hasMythic,
+  window.ForgeBattle.start({ classId: battleClass(), questIndex: idx, equipped: prof.equipped, levels: prof.levels, dialog, hasMythic, bonusHearts: prof.bonusHearts,
     onWin: async (res)=>{                                // persist loot so it's equippable on the victory screen
       const d = await fetch('/api/battle/win',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({crewId:ME,questId:qid,xp:res.xp,loot:res.loot})}).then(r=>r.json());
-      if(d.state) STATE=d.state; renderHUD(); renderMap();
+      if(d.state) STATE=d.state; if(d.gotHeart) toast(`❤ Permanent heart earned! (+${d.bonusHearts} total)`); renderHUD(); renderMap();
     },
     onContinue: (res)=>{ startMusic(); toast(`⚔ Battle won! +${res.xp} XP · ${res.loot.length} loot`); openQuest(qid); },
     onInventory: (resume)=>openInventoryOverlay(resume),

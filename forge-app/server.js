@@ -51,7 +51,7 @@ function sanitizeMob(m) {
   const ai = m.ai === 'shooter' ? 'shooter' : 'chase';
   const color = /^#[0-9a-fA-F]{6}$/.test(m.color) ? m.color : '#cc8855';
   const def = { name: String(m.name || id).slice(0, 28), hp: num(m.hp, 20, 1, 100000), atk: num(m.atk, 8, 0, 100000),
-    speed: num(m.speed, 70, 5, 600), r: num(m.r, 13, 6, 60), color, ai };
+    speed: num(m.speed, 70, 5, 600), r: num(m.r, 13, 6, 60), color, ai, power: num(m.power, 1, 1, 4) };  // power = heart damage (heavy = 2+)
   if (ai === 'shooter') { def.shotCd = num(m.shotCd, 1.7, 0.2, 10); def.shotSpd = num(m.shotSpd, 180, 40, 1200); }
   // Optional animated sprite: a horizontal strip data URL + frame count (walk-cycle from Nano Banana).
   if (typeof m.sprite === 'string' && m.sprite.startsWith('data:image/') && m.sprite.length <= MAX_SPRITE_BYTES) {
@@ -87,7 +87,7 @@ function rankFor(xp) { let r = RANKS[0]; for (const rank of RANKS) if (xp >= ran
 function emptyState() { const s = { crew: {} }; for (const c of CREW) s.crew[c.id] = { xp: 0, steps: {} }; return s; }
 // sum step xp, skipping the special __profile key (character/inventory data)
 function recomputeXp(m) { m.xp = Object.entries(m.steps).reduce((sum, [k, v]) => sum + (k.startsWith('__') ? 0 : (v.xp || 0)), 0); return m.xp; }
-function getProfile(m) { const p = (m.steps.__profile ||= { inventory: [], equipped: {}, battles: {}, gold: 0, levels: {} }); p.inventory ||= []; p.equipped ||= {}; p.battles ||= {}; p.gold ??= 0; p.levels ||= {}; return p; }
+function getProfile(m) { const p = (m.steps.__profile ||= { inventory: [], equipped: {}, battles: {}, gold: 0, levels: {} }); p.inventory ||= []; p.equipped ||= {}; p.battles ||= {}; p.gold ??= 0; p.levels ||= {}; p.bonusHearts ??= 0; return p; }
 
 // campaign structure WITHOUT rubrics (safe to send to the browser)
 function publicQuests() {
@@ -411,12 +411,15 @@ const server = http.createServer(async (req, res) => {
         if (GEARDATA.GEAR[id].tier === 'Mythic' && prof.inventory.includes(id)) continue;
         prof.inventory.push(id);
       }
+      let gotHeart = false;
       if (questId != null && !prof.battles[questId]) {           // XP once per battle; loot every time
         prof.battles[questId] = true;
+        prof.bonusHearts = (prof.bonusHearts || 0) + 1;          // first kill of this boss = a PERMANENT heart
+        gotHeart = true;
         m.steps['battle:' + questId] = { xp: Math.max(0, Math.round(+xp || 0)), at: Date.now(), cleared: true };
       }
       recomputeXp(m); await store.putMember(crewId, m);
-      return sendJson(res, 200, { ok: true, gained: items, state: decorate(state) });
+      return sendJson(res, 200, { ok: true, gained: items, gotHeart, bonusHearts: prof.bonusHearts, state: decorate(state) });
     }
     if (req.method === 'POST' && url === '/api/profile/equip') {
       const { crewId, slot, itemId } = await readBody(req);

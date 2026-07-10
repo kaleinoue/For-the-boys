@@ -1,27 +1,29 @@
 // ============ THE FORGE — Battle data (classes, enemies, gear, waves) ============
 // All original. Tune freely — the engine reads straight from here.
 
+// `hit` = accuracy stat that cancels a mob's dodge chance. `armor` counters enemy power (reduces heart loss).
 const CLASSES = {
   zeppelin: { name:'Zeppelin', klass:'Vanguard',  color:'#ff5d5d', accent:'#ff9a9a',
-    base:{ hp:130, atk:15, armor:7, speed:118 }, attack:'melee', reach:48, arc:1.7, cd:0.45, dodge:'block' },
+    base:{ hp:130, atk:15, armor:7, speed:118, hit:0.10 }, attack:'melee', reach:52, arc:2.1, cd:0.45, dodge:'block' },  // wide frontal CONE
   leo:      { name:'Leo',      klass:'Bard',      color:'#ffd15c', accent:'#ffe6a3',
-    base:{ hp:82,  atk:9,  armor:2, speed:138 }, attack:'shot',  reach:520, cd:0.30, dodge:'dash' },
+    base:{ hp:82,  atk:9,  armor:2, speed:138, hit:0.18 }, attack:'shot',  reach:520, cd:0.30, dodge:'dash' },
   jonah:    { name:'Jonah',    klass:'Artificer', color:'#5cff9d', accent:'#b6ffd6',
-    base:{ hp:98,  atk:11, armor:3, speed:126 }, attack:'burst', reach:78,  cd:0.62, dodge:'dash' },
+    base:{ hp:98,  atk:13, armor:3, speed:126, hit:0.12 }, attack:'burst', reach:78,  cd:0.52, dodge:'dash' },  // (B) stronger single/boss dmg
   jyana:    { name:'Jyana',    klass:'Engine',    color:'#c88bff', accent:'#e3c6ff',
-    base:{ hp:70,  atk:7,  armor:2, speed:172 }, attack:'melee', reach:34, arc:2.4, cd:0.20, dodge:'dash' },
+    base:{ hp:79,  atk:7,  armor:2, speed:172, hit:0.10 }, attack:'melee', reach:34, arc:2.4, cd:0.20, dodge:'dash' },  // (D) 4 hearts floor
   // Dual class: every swing is a melee arc AND a homing magic bolt. Can equip any gear (incl. other classes' Mythics).
   via:      { name:'Princess Via', klass:'Spellblade', color:'#ff7bd5', accent:'#ffc2ec',
-    base:{ hp:104, atk:13, armor:4, speed:130 }, attack:'spellblade', reach:46, arc:1.7, cd:0.42, dodge:'dash' },
+    base:{ hp:104, atk:13, armor:4, speed:130, hit:0.12 }, attack:'spellblade', reach:46, arc:1.7, cd:0.42, dodge:'dash' },
 };
 
+// `power` = heart damage a clean hit does (before armor). Light mobs 1, heavy 2.
 const ENEMIES = {
-  grunt: { name:'Grunt',   hp:18, atk:8,  speed:74, r:13, color:'#cc8855', ai:'chase' },
-  zap:   { name:'Zapper',  hp:12, atk:6,  speed:52, r:12, color:'#66ccff', ai:'shooter', shotCd:1.7, shotSpd:180 },
-  brute: { name:'Brute',   hp:52, atk:15, speed:40, r:19, color:'#aa5555', ai:'chase' },
+  grunt: { name:'Grunt',   hp:18, atk:8,  speed:74, r:13, color:'#cc8855', ai:'chase', power:1 },
+  zap:   { name:'Zapper',  hp:12, atk:6,  speed:52, r:12, color:'#66ccff', ai:'shooter', shotCd:1.7, shotSpd:180, power:1 },
+  brute: { name:'Brute',   hp:52, atk:15, speed:40, r:19, color:'#aa5555', ai:'chase', power:2 },
 };
 
-const BOSS = { name:'The Gatekeeper', hp:280, atk:17, speed:58, r:28, color:'#ff3355', ai:'boss', shotCd:1.4, shotSpd:210 };
+const BOSS = { name:'The Gatekeeper', hp:280, atk:17, speed:58, r:28, color:'#ff3355', ai:'boss', shotCd:1.4, shotSpd:210, power:2 };
 
 // Gear. slot: weapon | armor | trinket. mods add to stats. Mythics are class-locked.
 const GEAR = {
@@ -92,7 +94,7 @@ function projForClass(classId) { return projById(CLASS_PROJ[classId]); }
 function mobPoolFor(level) {                            // which mob ids can spawn at this level
   const assigned = LEVEL_MOBS[level];
   if (Array.isArray(assigned) && assigned.length) { const p = assigned.filter(k => ENEMIES[k]); if (p.length) return p; }
-  const pool = ['grunt', 'zap']; if (level >= 4) pool.push('brute');   // default ramp
+  const pool = ['grunt', 'zap']; if (level >= 5) pool.push('brute');   // (E) heavy brutes gated to L5+
   return pool.filter(k => ENEMIES[k]);
 }
 
