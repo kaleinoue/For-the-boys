@@ -54,7 +54,7 @@
     if (!root) { root = document.createElement('div'); root.id = 'battle-root'; document.body.appendChild(root); }
     root.innerHTML = `
       <canvas id="battle-canvas"></canvas>
-      <div class="b-hud"><button class="b-inv">🎒</button><span class="b-wave"></span></div>
+      <div class="b-hud"><button class="b-quit" title="end battle">✕ END</button><button class="b-inv">🎒</button><span class="b-wave"></span></div>
       <div class="b-boss-wrap"><div class="b-boss-fill"></div></div>
       <div class="b-keys"></div>
       <div class="b-toast"></div>
@@ -69,7 +69,7 @@
     const dlg = root.querySelector('.b-dialog'), dlgLine = dlg.querySelector('.line');
     const overlay = root.querySelector('.b-overlay'), overH2 = overlay.querySelector('h2'), lootEl = overlay.querySelector('.b-loot'), cta = overlay.querySelector('.cta');
     const toast = root.querySelector('.b-toast');
-    const invBtn = root.querySelector('.b-inv'), eqBtn = overlay.querySelector('.eq');
+    const invBtn = root.querySelector('.b-inv'), eqBtn = overlay.querySelector('.eq'), quitBtn = root.querySelector('.b-quit');
 
     let W = 0, H = 0, DPR = Math.min(2, window.devicePixelRatio || 1);
     function resize() { W = root.clientWidth; H = root.clientHeight; cv.width = W * DPR; cv.height = H * DPR; ctx.setTransform(DPR, 0, 0, DPR, 0, 0); }
@@ -118,6 +118,11 @@
     // use 'click' (not pointerdown): on touch, opening on pointerdown lets the
     // tap's click land on the modal backdrop and instantly close it.
     invBtn.addEventListener('click', () => openInv());
+    // End battle early: confirm, then bail back to the map (no loot from an abandoned run).
+    quitBtn.addEventListener('click', () => {
+      if (state === 'won' || state === 'lost') return;
+      if (confirm('End this battle and return to the map? You keep no loot from this run.')) { cleanup(); (opts.onExit || (() => {}))(); }
+    });
 
     // ---- dialog ----
     function showDialog(lines, then) { dlgQueue = lines.slice(); state = 'dialog'; nextLine(then); dlg.classList.add('on'); }
