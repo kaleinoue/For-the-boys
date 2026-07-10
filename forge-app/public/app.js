@@ -5,6 +5,7 @@ let openQuestId = null;
 let GM_CODE = localStorage.getItem('forge_gm_code') || null;   // Game Master passcode
 let RUBRICS = null;                                            // cached admin rubrics
 let MOBS = { mobs:{}, levels:{} };                             // God-Mode mob DB (custom mobs + level assignments)
+let gmClass = localStorage.getItem('forge_gm_class') || '';    // God Mode: fight as any class style (test override)
 const isGod = () => !!GM_CODE;
 const MAX_LEVEL = 16;                                          // quest indices 0..16
 
@@ -96,12 +97,18 @@ function renderAdminBar(){
   if(!isGod()){ bar.classList.add('hidden'); return; }
   bar.classList.remove('hidden');
   const opts = QUESTS.crew.map(c=>`<option value="${c.id}" ${c.id===ME?'selected':''}>${c.emoji} ${c.name}</option>`).join('');
+  const CL = window.BATTLE.CLASSES;
+  const classOpts = `<option value="">class: profile default</option>` +
+    Object.entries(CL).map(([id,c])=>`<option value="${id}" ${id===gmClass?'selected':''}>⚔ ${c.name} · ${c.klass}</option>`).join('');
   bar.innerHTML = `<span class="gm-tag">🛠️ GOD MODE</span>
     <label class="gm-actas">Act as: <select id="gm-actas">${opts}</select></label>
+    <label class="gm-actas">Test class: <select id="gm-class">${classOpts}</select></label>
     <button id="gm-mobs" class="pixel-btn ghost">🗿 Mob DB</button>
-    <span class="gm-hint">all trials unlocked · force-clear + rubrics on each step</span>
+    <span class="gm-hint">all trials unlocked · pick a Test class to fight with any style</span>
     <button id="gm-logout" class="pixel-btn ghost">exit GM</button>`;
   $('#gm-actas').onchange = (e)=>{ ME = e.target.value; localStorage.setItem('forge_crew_id',ME); renderHUD(); renderMap(); };
+  $('#gm-class').onchange = (e)=>{ gmClass = e.target.value; localStorage.setItem('forge_gm_class', gmClass); sfx('click');
+    toast(gmClass?`Test class: ${CL[gmClass].name} (${CL[gmClass].klass})`:'Class: profile default'); renderHUD(); };
   $('#gm-mobs').onclick = ()=>{ sfx('click'); openMobs(); };
   $('#gm-logout').onclick = logoutGM;
 }
@@ -300,7 +307,10 @@ async function saveLevelAssign(){
 }
 
 // ---- character / inventory (gear affects battle stats) ----
-function battleClass(){ return (ME && ME!=='gm') ? ME : 'zeppelin'; }
+function battleClass(){
+  if(isGod() && gmClass && window.BATTLE.CLASSES[gmClass]) return gmClass;   // God Mode class-style override (test any class)
+  return (ME && ME!=='gm') ? ME : 'zeppelin';
+}
 function profileOf(id){ const p = STATE.crew[id]?.steps?.__profile; return { inventory:(p&&p.inventory)||[], equipped:(p&&p.equipped)||{}, battles:(p&&p.battles)||{}, gold:(p&&p.gold)||0, levels:(p&&p.levels)||{} }; }
 function computeStats(id){
   const B=window.BATTLE, base={...B.CLASSES[battleClass()].base}, prof=profileOf(id);
