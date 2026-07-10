@@ -136,42 +136,63 @@ function chromaKeyCrop(src){
   const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d');
   g.drawImage(src, 0, 0, w, h);
   const im=g.getImageData(0,0,w,h), d=im.data;
+  for(let i=0;i<d.length;i+=4){ const r=d[i],gr=d[i+1],b=d[i+2]; if(gr>140 && r<140 && b<140 && gr>r*1.3 && gr>b*1.3) d[i+3]=0; }  // flat green -> transparent
+  keepMainBlobs(d, w, h);                                                 // drop the Gemini ✨ watermark + stray specks
   let minx=w, miny=h, maxx=-1, maxy=-1;
-  for(let i=0;i<d.length;i+=4){
-    const r=d[i], gr=d[i+1], b=d[i+2];
-    if(gr>140 && r<140 && b<140 && gr>r*1.3 && gr>b*1.3) d[i+3]=0;        // flat green -> transparent
-    if(d[i+3]>20){ const p=i/4, px=p%w, py=(p/w)|0; if(px<minx)minx=px; if(px>maxx)maxx=px; if(py<miny)miny=py; if(py>maxy)maxy=py; }
-  }
+  for(let p=0;p<w*h;p++){ if(d[p*4+3]>20){ const px=p%w, py=(p/w)|0; if(px<minx)minx=px; if(px>maxx)maxx=px; if(py<miny)miny=py; if(py>maxy)maxy=py; } }
   g.putImageData(im,0,0);
-  if(maxx<minx) return c;                                                 // nothing left after keying — return as-is
+  if(maxx<minx){ const e=document.createElement('canvas'); e.width=1; e.height=1; return e; }   // nothing survived
   const cw=maxx-minx+1, ch=maxy-miny+1;
   const out=document.createElement('canvas'); out.width=cw; out.height=ch;
   out.getContext('2d').drawImage(c, minx,miny,cw,ch, 0,0,cw,ch);
   return out;
 }
-function centerCell(src){
-  const c=document.createElement('canvas'); c.width=CELL; c.height=CELL; const g=c.getContext('2d');
-  const sw=src.width||src.naturalWidth, sh=src.height||src.naturalHeight, s=Math.min(CELL/sw, CELL/sh), dw=sw*s, dh=sh*s;
-  g.drawImage(src, 0,0,sw,sh, (CELL-dw)/2,(CELL-dh)/2, dw,dh);
-  return c;
+// Keep connected (8-way) opaque regions that are a real fraction of the biggest one; zero the rest.
+// Removes the corner watermark and stray pixels while keeping detached-but-sizable bits (e.g. an extended sword).
+function keepMainBlobs(d, w, h){
+  const n=w*h, label=new Int32Array(n), stack=new Int32Array(n), sizes=[0]; let cur=0, best=0;
+  for(let s=0;s<n;s++){
+    if(label[s]!==0 || d[s*4+3]<=40) continue;
+    cur++; let sp=0, size=0; stack[sp++]=s; label[s]=cur;
+    while(sp>0){ const q=stack[--sp]; size++; const qx=q%w, qy=(q/w)|0;
+      for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy) continue;
+        const nx=qx+dx, ny=qy+dy; if(nx<0||ny<0||nx>=w||ny>=h) continue;
+        const r=ny*w+nx; if(label[r]===0 && d[r*4+3]>40){ label[r]=cur; stack[sp++]=r; } } }
+    sizes[cur]=size; if(size>best) best=size;
+  }
+  if(!best) return; const thresh=Math.max(60, best*0.15);
+  for(let p=0;p<n;p++){ const l=label[p]; if(l && sizes[l]<thresh) d[p*4+3]=0; }
 }
 function buildStrip(cells){
   const c=document.createElement('canvas'); c.width=CELL*cells.length; c.height=CELL; const g=c.getContext('2d');
   cells.forEach((cell,i)=>g.drawImage(cell, i*CELL, 0));
   return c.toDataURL('image/png');
 }
-async function stripFromOneImage(dataUrl, frames){    // one image (a strip) -> N keyed+cropped cells
-  const img=await loadImg(dataUrl), fw=Math.max(1, Math.floor(img.width/frames)), cells=[];
+// Assemble cropped frames on a SHARED scale + SHARED baseline (feet on the floor) so the walk doesn't bounce/rescale.
+function assembleStrip(crops){
+  const pad=Math.round(CELL*0.07), baseY=CELL-pad;
+  let maxW=1, maxH=1; for(const c of crops){ maxW=Math.max(maxW,c.width); maxH=Math.max(maxH,c.height); }
+  const scale=Math.min((CELL-2*pad)/maxH, CELL/maxW);
+  const cells=crops.map(c=>{
+    const cell=document.createElement('canvas'); cell.width=CELL; cell.height=CELL; const g=cell.getContext('2d');
+    const dw=c.width*scale, dh=c.height*scale;
+    g.drawImage(c, 0,0,c.width,c.height, (CELL-dw)/2, baseY-dh, dw, dh);   // horizontally centered, feet on the baseline
+    return cell;
+  });
+  return buildStrip(cells);
+}
+async function stripFromOneImage(dataUrl, frames){    // one image (a strip) -> N keyed+cropped frames
+  const img=await loadImg(dataUrl), fw=Math.max(1, Math.floor(img.width/frames)), crops=[];
   for(let i=0;i<frames;i++){
     const col=document.createElement('canvas'); col.width=fw; col.height=img.height;
     col.getContext('2d').drawImage(img, i*fw,0,fw,img.height, 0,0,fw,img.height);
-    cells.push(centerCell(chromaKeyCrop(col)));
+    crops.push(chromaKeyCrop(col));
   }
-  return { url: buildStrip(cells), frames };
+  return { url: assembleStrip(crops), frames };
 }
-async function stripFromManyImages(dataUrls){         // N images -> one frame each (best alignment)
-  const cells=[]; for(const u of dataUrls) cells.push(centerCell(chromaKeyCrop(await loadImg(u))));
-  return { url: buildStrip(cells), frames: cells.length };
+async function stripFromManyImages(dataUrls){         // N images -> one frame each
+  const crops=[]; for(const u of dataUrls) crops.push(chromaKeyCrop(await loadImg(u)));
+  return { url: assembleStrip(crops), frames: crops.length };
 }
 function setDraft(res){ mobDraftSprite=res.url; mobDraftFrames=res.frames; $('#gen-frames').value=res.frames; animatePreview(); }
 
