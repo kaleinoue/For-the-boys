@@ -330,7 +330,7 @@
         fx.push({ t: 'burst', x: player.x, y: player.y, r: cls.reach, life: .25, color: cls.accent });
       } else if (cls.attack === 'spellblade') {   // dual: melee arc up close + a homing magic bolt at range
         const fa = Math.atan2(player.face.y, player.face.x);
-        for (const e of [...enemies]) { const d = dist(e, player); if (d > cls.reach + e.r) continue; const ea = Math.atan2(e.y - player.y, e.x - player.x); let diff = Math.abs(ea - fa); if (diff > Math.PI) diff = 2 * Math.PI - diff; if (diff < cls.arc / 2) tryHit(e, stats.atk); }
+        for (const e of [...enemies]) { const d = dist(e, player); if (d > cls.reach + e.r) continue; const ea = Math.atan2(e.y - player.y, e.x - player.x); let diff = Math.abs(ea - fa); if (diff > Math.PI) diff = 2 * Math.PI - diff; if (diff < cls.arc / 2 + Math.atan2(e.r, d)) tryHit(e, stats.atk); }
         fx.push({ t: 'slash', x: player.x, y: player.y, a: fa, reach: cls.reach, arc: cls.arc, life: .18, color: cls.accent });
         let tx = player.face.x, ty = player.face.y, near = null, nd = 1e9;   // magic bolt auto-aims nearest
         for (const e of enemies) { const d = dist(e, player); if (d < nd) { nd = d; near = e; } }
@@ -339,7 +339,7 @@
         fx.push({ t: 'shot', x: player.x, y: player.y, life: .12 });
       } else { // melee arc
         const fa = Math.atan2(player.face.y, player.face.x);
-        for (const e of [...enemies]) { const d = dist(e, player); if (d > cls.reach + e.r) continue; const ea = Math.atan2(e.y - player.y, e.x - player.x); let diff = Math.abs(ea - fa); if (diff > Math.PI) diff = 2 * Math.PI - diff; if (diff < cls.arc / 2) tryHit(e, stats.atk); }
+        for (const e of [...enemies]) { const d = dist(e, player); if (d > cls.reach + e.r) continue; const ea = Math.atan2(e.y - player.y, e.x - player.x); let diff = Math.abs(ea - fa); if (diff > Math.PI) diff = 2 * Math.PI - diff; if (diff < cls.arc / 2 + Math.atan2(e.r, d)) tryHit(e, stats.atk); }
         fx.push({ t: 'slash', x: player.x, y: player.y, a: fa, reach: cls.reach, arc: cls.arc, life: .18, color: cls.accent });
       }
     }
