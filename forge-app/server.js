@@ -34,6 +34,9 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const STATE_FILE = path.join(__dirname, 'data', 'progress.json');
 const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
 const MODEL = process.env.FORGE_MODEL || 'gemini-2.0-flash';
+// Grading fallback chain. Each free-tier model has its OWN per-minute quota, so a cap on one
+// rolls to the next (fresh quota) instead of blocking grading. Override with FORGE_MODELS (comma list).
+const GRADE_MODELS = [...new Set((process.env.FORGE_MODELS || `${MODEL},gemini-2.0-flash-lite,gemini-2.5-flash-lite,gemini-2.5-flash`).split(',').map(s => s.trim()).filter(Boolean))];
 const IMAGE_MODEL = process.env.FORGE_IMAGE_MODEL || 'gemini-2.5-flash-image';  // "Nano Banana"
 const PASS_SCORE = 60;
 const MAX_SPRITE_BYTES = 320 * 1024;  // stored sprite strips are downscaled client-side; cap the payload
@@ -177,26 +180,26 @@ ${text}
 Return ONLY JSON:
 {"score": <integer 0-100>, "feedback": "<2-3 sentences, specific to THEIR answer, warm and a little hyped>", "tip": "<one concrete way to level it up>"}`;
 
-  // Try the primary model, then a lighter model with higher free limits.
-  // Retry once on 429 (free-tier rate limit) before giving up to the mock grader.
-  const models = [...new Set([MODEL, 'gemini-2.0-flash-lite'])];
-  let lastErr = '';
-  for (const model of models) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      let res;
-      try { res = await callGemini(model, prompt, key); }
-      catch (e) { lastErr = 'network: ' + e.message; break; }
-      if (res.status === 429) { lastErr = `429 rate limit on ${model}`; if (attempt === 0) { await sleep(1500); continue; } break; }
-      if (!res.ok) { lastErr = `${model} HTTP ${res.status}`; break; }
-      try {
-        const data = await res.json();
-        const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-        const parsed = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, ''));
-        const score = Math.max(0, Math.min(100, Math.round(parsed.score ?? 0)));
-        return { passed: score >= PASS_SCORE, score, feedback: parsed.feedback || 'Graded.', tip: parsed.tip || '' };
-      } catch (e) { lastErr = 'parse: ' + e.message; break; }
-    }
+  // Walk the fallback chain: one request per model. On a rate limit (429) roll straight to the
+  // NEXT model (which has its own quota) rather than retrying the same one — a per-minute cap can't
+  // clear in seconds, so retrying just burns quota. Stop early on a bad key (400) — every model 400s.
+  let lastErr = '', sawRate = false;
+  for (const model of GRADE_MODELS) {
+    let res;
+    try { res = await callGemini(model, prompt, key); }
+    catch (e) { lastErr = 'network: ' + e.message; continue; }
+    if (res.status === 429) { lastErr = `429 rate limit on ${model}`; sawRate = true; continue; }   // next model's fresh quota
+    if (res.status === 400) { lastErr = `${model} HTTP 400`; break; }                                 // bad key — don't waste more calls
+    if (!res.ok) { lastErr = `${model} HTTP ${res.status}`; continue; }
+    try {
+      const data = await res.json();
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      const parsed = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, ''));
+      const score = Math.max(0, Math.min(100, Math.round(parsed.score ?? 0)));
+      return { passed: score >= PASS_SCORE, score, feedback: parsed.feedback || 'Graded.', tip: parsed.tip || '' };
+    } catch (e) { lastErr = 'parse: ' + e.message; continue; }
   }
+  if (sawRate && !/HTTP 400/.test(lastErr)) lastErr = '429 rate limit';
   console.error('Grading fell back to mock:', lastErr);
   const note = /429|rate limit/i.test(lastErr) ? 'Your key hit its free limit — wait a bit and re-submit.'
     : /HTTP 400|API_KEY_INVALID|invalid/i.test(lastErr) ? "Your AI key didn't work — reopen 🔑 and re-paste it with the copy button."
@@ -240,16 +243,15 @@ function classify429(body) {
 async function geminiPing(key) {
   const k = (key && key.trim()) || GEMINI_KEY;
   if (!k) return { keyPresent: false, ok: false, note: 'No API key set. Add your own in the app (🔑) or set GEMINI_API_KEY on the server.' };
-  const models = [...new Set([MODEL, 'gemini-2.0-flash-lite'])];
   let last = { keyPresent: true, ok: false };
-  for (const model of models) {
+  for (const model of GRADE_MODELS) {
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`;
       const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }) });
       if (res.ok) return { keyPresent: true, ok: true, model };
       const body = (await res.text()).slice(0, 600);
       last = { keyPresent: true, ok: false, status: res.status, model, ...(res.status === 429 ? classify429(body) : { error: body.slice(0, 300) }) };
-      if (res.status !== 429) break;   // a real error (bad key, etc.) won't differ by model
+      if (res.status === 400) break;   // bad key — every model will 400; stop. 429/404 -> try next model.
     } catch (e) { last = { keyPresent: true, ok: false, error: String(e.message) }; }
   }
   return last;
