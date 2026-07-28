@@ -33,6 +33,7 @@
     else if (kind === 'lose') { bTone(300, .3, 'sawtooth', .09, 0, 90); }
     else if (kind === 'boss') { bTone(90, .45, 'sawtooth', .1, 0, 60); }
     else if (kind === 'shot') { bTone(470, .09, 'sine', .035, 0, 300); }
+    else if (kind === 'land') { bTone(115, .16, 'sine', .09, 0, 58); bNoise(.09, .035); }   // boots hitting dirt after a drop
   }
 
   function statsFor(classId, equipped, levels) {
@@ -266,9 +267,11 @@
       // movement (blocking slows you down, water slows you more); knockback shove is added on top
       const wasWet = T.waterAt(player.x, player.y);
       const spd = stats.speed * (player.blocking ? 0.55 : 1) * T.slowAt(player.x, player.y);
-      if (player.dashV) { T.move(player, player.x + player.dashV.x * dt, player.y + player.dashV.y * dt, player.r); player.dashV.life -= dt; if (player.dashV.life <= 0) player.dashV = null; }
-      else if (ix || iy) T.move(player, player.x + ix * spd * dt, player.y + iy * spd * dt, player.r);
-      if (player.kbt > 0) { T.move(player, player.x + player.kbx * dt, player.y + player.kby * dt, player.r); player.kbt -= dt; }
+      let fell = 0;
+      if (player.dashV) { fell = T.move(player, player.x + player.dashV.x * dt, player.y + player.dashV.y * dt, player.r); player.dashV.life -= dt; if (player.dashV.life <= 0) player.dashV = null; }
+      else if (ix || iy) fell = T.move(player, player.x + ix * spd * dt, player.y + iy * spd * dt, player.r);
+      if (player.kbt > 0) { fell += T.move(player, player.x + player.kbx * dt, player.y + player.kby * dt, player.r); player.kbt -= dt; }
+      if (fell > 0.3) { fx.push({ t: 'land', x: player.x, y: player.y, z: player.z, life: .3 }); shake = Math.min(10, shake + 5); bSfx('land'); }   // dropped off a ledge
       if (wasWet && (ix || iy) && Math.random() < 0.25) fx.push({ t: 'splash', x: player.x, y: player.y, life: .35 });
 
       // attack
@@ -606,6 +609,8 @@
         flat(() => { ctx.strokeStyle = '#fff'; ctx.lineWidth = 7; ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.stroke(); ctx.strokeStyle = f.color; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.stroke(); }); ctx.globalAlpha = 1; }
       else if (f.t === 'pop') { ctx.globalAlpha = Math.min(1, f.life * 3); const rrad = 24 * (1 - f.life * 3);
         flat(() => { ctx.fillStyle = f.color; for (let i = 0; i < 8; i++) { const a = i / 8 * 7; ctx.beginPath(); ctx.arc(Math.cos(a) * rrad, Math.sin(a) * rrad, 4.5, 0, 7); ctx.fill(); } }); ctx.globalAlpha = 1; }
+      else if (f.t === 'land') { ctx.globalAlpha = Math.min(1, f.life * 3) * 0.75; const R = 6 + (0.3 - f.life) * 70;
+        flat(() => { ctx.strokeStyle = '#c9b28a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.stroke(); }); ctx.globalAlpha = 1; }
       else if (f.t === 'splash') { ctx.globalAlpha = Math.min(1, f.life * 3) * 0.8; const R = 8 + (0.35 - f.life) * 44;
         flat(() => { ctx.strokeStyle = '#cbefff'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.stroke(); }); ctx.globalAlpha = 1; }
       else if (f.t === 'spark') { ctx.globalAlpha = Math.min(1, f.life * 7); ctx.fillStyle = '#fff6c2';
