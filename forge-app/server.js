@@ -40,11 +40,24 @@ const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const STATE_FILE = path.join(__dirname, 'data', 'progress.json');
 const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
-const MODEL = process.env.FORGE_MODEL || 'gemini-2.0-flash';
-// Grading fallback chain. Each free-tier model has its OWN per-minute quota, so a cap on one
-// rolls to the next (fresh quota) instead of blocking grading. Override with FORGE_MODELS (comma list).
-const GRADE_MODELS = [...new Set((process.env.FORGE_MODELS || `${MODEL},gemini-2.0-flash-lite,gemini-2.5-flash-lite,gemini-2.5-flash`).split(',').map(s => s.trim()).filter(Boolean))];
+// Free-tier default. Flash-Lite has by far the biggest daily allowance (~1000 requests/day
+// vs ~250 for Flash), and it grades short answers against a rubric perfectly well — so the
+// cheap model is the PRIMARY, not the fallback.
+const MODEL = process.env.FORGE_MODEL || 'gemini-2.5-flash-lite';
+// Grading fallback chain, ordered biggest-daily-quota first. Each model has its own quota,
+// so a cap on one rolls to the next instead of blocking grading. Override with FORGE_MODELS.
+//
+// Keep RETIRED models out of this list. Every dead name costs a wasted round-trip on every
+// grade before the chain reaches a model that answers. gemini-2.0-flash and
+// gemini-2.0-flash-lite were shut down 2026-06-01; gemini-2.5-flash retires 2026-10-16.
+const GRADE_MODELS = [...new Set((process.env.FORGE_MODELS || `${MODEL},gemini-2.5-flash`).split(',').map(s => s.trim()).filter(Boolean))];
+// Models the API told us this key can't use (404 / not found). Remembered for the life of the
+// process so we stop paying a round-trip to rediscover it on every single grade.
+const deadModels = new Set();
+const liveModels = () => { const live = GRADE_MODELS.filter(m => !deadModels.has(m)); return live.length ? live : GRADE_MODELS; };
 const IMAGE_MODEL = process.env.FORGE_IMAGE_MODEL || 'gemini-2.5-flash-image';  // "Nano Banana"
+// Override only for local testing against a stub. Leave unset in real use.
+const GEMINI_BASE = (process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com').replace(/\/$/, '');
 const PASS_SCORE = 60;
 const MAX_SPRITE_BYTES = 320 * 1024;  // stored sprite strips are downscaled client-side; cap the payload
 
@@ -420,6 +433,14 @@ async function loadSprite(id) {
 }
 
 // ---- the AI judge -----------------------------------------------------------
+// Minimum gap between real grading calls for one crew member. Short enough that nobody
+// notices while actually working, long enough that a frustrated re-submit spree can't
+// drain a daily quota in a minute. 0 disables it.
+const GRADE_COOLDOWN_MS = Math.max(0, Number(process.env.FORGE_GRADE_COOLDOWN_MS ?? 8000));
+const lastGradeAt = new Map();
+const cooldownLeft = (crewId) => Math.max(0, GRADE_COOLDOWN_MS - (Date.now() - (lastGradeAt.get(crewId) || 0)));
+const markGraded = (crewId) => lastGradeAt.set(crewId, Date.now());
+
 async function gradeResponse(step, response, userKey) {
   const text = (response || '').trim();
   if (text.length < 3)
@@ -446,13 +467,22 @@ Return ONLY JSON:
   // Walk the fallback chain: one request per model. On a rate limit (429) roll straight to the
   // NEXT model (which has its own quota) rather than retrying the same one — a per-minute cap can't
   // clear in seconds, so retrying just burns quota. Stop early on a bad key (400) — every model 400s.
-  let lastErr = '', sawRate = false;
-  for (const model of GRADE_MODELS) {
+  let lastErr = '', sawRate = false, perDay = false;
+  for (const model of liveModels()) {
     let res;
     try { res = await callGemini(model, prompt, key); }
     catch (e) { lastErr = 'network: ' + e.message; continue; }
-    if (res.status === 429) { lastErr = `429 rate limit on ${model}`; sawRate = true; continue; }   // next model's fresh quota
-    if (res.status === 400) { lastErr = `${model} HTTP 400`; break; }                                 // bad key — don't waste more calls
+    if (res.status === 429) {
+      const info = classify429((await res.text()).slice(0, 600));
+      perDay = perDay || info.limit === 'perDay';
+      lastErr = `429 ${info.limit} on ${model}`; sawRate = true; continue;   // next model's own quota
+    }
+    if (res.status === 400) { lastErr = `${model} HTTP 400`; break; }        // bad key — don't waste more calls
+    if (res.status === 404) {                                               // retired / not enabled for this key
+      deadModels.add(model);
+      console.warn(`Model "${model}" is not available for this key — skipping it from now on.`);
+      lastErr = `${model} HTTP 404`; continue;
+    }
     if (!res.ok) { lastErr = `${model} HTTP ${res.status}`; continue; }
     try {
       const data = await res.json();
@@ -462,10 +492,14 @@ Return ONLY JSON:
       return { passed: score >= PASS_SCORE, score, feedback: parsed.feedback || 'Graded.', tip: parsed.tip || '' };
     } catch (e) { lastErr = 'parse: ' + e.message; continue; }
   }
-  if (sawRate && !/HTTP 400/.test(lastErr)) lastErr = '429 rate limit';
+  if (sawRate && !/HTTP 400/.test(lastErr)) lastErr = `429 rate limit (${perDay ? 'perDay' : 'perMinute'})`;
   console.error('Grading fell back to mock:', lastErr);
-  const note = /429|rate limit/i.test(lastErr) ? 'Your key hit its free limit — wait a bit and re-submit.'
+  // Daily and per-minute caps need different advice: one clears in a minute, the other at
+  // midnight Pacific. Telling a kid to "wait a bit" on a spent daily quota just wastes calls.
+  const note = perDay ? "Your key's DAILY free limit is used up — it resets at midnight Pacific. Your answer is saved."
+    : /429|rate limit/i.test(lastErr) ? 'Too many submissions in a minute — wait ~60s and re-submit.'
     : /HTTP 400|API_KEY_INVALID|invalid/i.test(lastErr) ? "Your AI key didn't work — reopen 🔑 and re-paste it with the copy button."
+    : /404/.test(lastErr) ? 'No usable grading model for this key — the Game Master may need to set FORGE_MODELS.'
     : 'AI grader unreachable right now — reopen 🔑 to re-test your key.';
   return mockGrade(step, text, note);
 }
@@ -473,7 +507,8 @@ Return ONLY JSON:
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 // Nano Banana image generation. Returns a data URL, or throws with a readable message.
 async function generateImage(prompt, key) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${IMAGE_MODEL}:generateContent?key=${key}`;
+  apiUsage.image++;
+  const url = `${GEMINI_BASE}/v1beta/models/${IMAGE_MODEL}:generateContent?key=${key}`;
   const res = await fetch(url, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } }),
@@ -486,11 +521,23 @@ async function generateImage(prompt, key) {
   return `data:${img.inlineData.mimeType || 'image/png'};base64,${img.inlineData.data}`;
 }
 
+// Where the quota actually went, since boot. Free-tier limits are per PROJECT, so if the crew
+// share one key they share one allowance — this is how the Game Master sees that happening.
+const apiUsage = { grade: 0, image: 0, keyTest: 0, cachedGrades: 0, cooldownBlocked: 0, serverKey: 0, ownKey: 0 };
+
 async function callGemini(model, prompt, key) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key || GEMINI_KEY}`;
+  apiUsage.grade++;
+  if (key && key !== GEMINI_KEY) apiUsage.ownKey++; else apiUsage.serverKey++;
+  const url = `${GEMINI_BASE}/v1beta/models/${model}:generateContent?key=${key || GEMINI_KEY}`;
   return fetch(url, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.4 } }),
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      // maxOutputTokens caps a runaway answer. The judge returns a small fixed JSON object, so
+      // this never truncates a real grade — it just stops one bad generation eating the shared
+      // per-minute token budget that every crew member's key draws from.
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 400 },
+    }),
   });
 }
 
@@ -501,23 +548,37 @@ function classify429(body) {
   return { limit: perDay ? 'perDay' : 'perMinute', retryDelay: m ? m[1] : null };
 }
 
-// Live check: is a Gemini key actually working? Tries the SAME model fallback grading uses,
-// so a momentary per-minute cap on the primary model doesn't report the key as dead.
+// Live check: is a Gemini key actually working?
+//
+// This costs REAL quota, so it is deliberately the cheapest call the app can make: one model,
+// one token of output. It used to walk the whole fallback chain, which meant a single "Test my
+// key" tap could spend four requests — on a 250/day allowance that is real money. A key that
+// works on one free model works on the others, so one probe answers the question.
 async function geminiPing(key) {
   const k = (key && key.trim()) || GEMINI_KEY;
   if (!k) return { keyPresent: false, ok: false, note: 'No API key set. Add your own in the app (🔑) or set GEMINI_API_KEY on the server.' };
-  let last = { keyPresent: true, ok: false };
-  for (const model of GRADE_MODELS) {
+  const models = liveModels();
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`;
-      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }) });
+      const url = `${GEMINI_BASE}/v1beta/models/${model}:generateContent?key=${k}`;
+      apiUsage.keyTest++;
+      const res = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }], generationConfig: { maxOutputTokens: 1 } }),
+      });
       if (res.ok) return { keyPresent: true, ok: true, model };
       const body = (await res.text()).slice(0, 600);
-      last = { keyPresent: true, ok: false, status: res.status, model, ...(res.status === 429 ? classify429(body) : { error: body.slice(0, 300) }) };
-      if (res.status === 400) break;   // bad key — every model will 400; stop. 429/404 -> try next model.
-    } catch (e) { last = { keyPresent: true, ok: false, error: String(e.message) }; }
+      const info = { keyPresent: true, ok: false, status: res.status, model, ...(res.status === 429 ? classify429(body) : { error: body.slice(0, 300) }) };
+      // 400 = bad key, and 429 = the key is real but capped (which still proves it works).
+      // Neither is worth spending another request on. Only an unavailable model (404) justifies
+      // trying the next name in the chain.
+      if (res.status === 404) { deadModels.add(model); if (i < models.length - 1) continue; }
+      if (res.status === 429) return { ...info, ok: false, keyWorks: true };
+      return info;
+    } catch (e) { return { keyPresent: true, ok: false, error: String(e.message) }; }
   }
-  return last;
+  return { keyPresent: true, ok: false, error: 'No available grading model for this key.' };
 }
 
 function mockGrade(step, text, note) {
@@ -803,8 +864,12 @@ const server = http.createServer(async (req, res) => {
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
       const cfg = await loadMobs();
       return sendJson(res, 200, {
-        storage: STORAGE_NAME, model: MODEL, gemini: await geminiPing(),
+        storage: STORAGE_NAME, model: MODEL, models: liveModels(), retiredModels: [...deadModels],
+        gemini: await geminiPing(),
         sprites: referencedSprites(cfg).size, configBytes: JSON.stringify(cfg).length,
+        // Since boot. `serverKey` counting up means the crew are sharing YOUR key — and so
+        // sharing one free-tier project quota. See README "AI grading".
+        apiUsage: { ...apiUsage },
       });
     }
     // "Test my key" for the in-app API-key panel. The key is checked live and NOT stored anywhere.
@@ -825,12 +890,43 @@ const server = http.createServer(async (req, res) => {
       const member = state.crew[crewId];
       if (!step || !member) return sendJson(res, 400, { error: 'Unknown crew member or step.' });
 
+      const prev = member.steps[stepId];
+      const text = (response || '').trim();
+
+      // Re-submitting the exact same words can't produce a different grade, so don't pay for it.
+      // Kids re-read their answer and hit ATTEMPT again constantly; on a ~250/day free quota that
+      // habit alone is what empties a key. Only replay grades that came from the real judge —
+      // a previous offline/mock grade should get a genuine attempt.
+      if (prev && !prev.offline && prev.score != null && text.length >= 3 && String(prev.response || '').trim() === text) {
+        apiUsage.cachedGrades++;
+        return sendJson(res, 200, {
+          result: { passed: prev.passed, score: prev.score, feedback: prev.feedback, tip: prev.tip,
+                    xpAwarded: prev.xp, alreadyBetter: true, cached: true },
+          member: memberSummary(crewId, member),
+          state: decorate(state),
+        });
+      }
+
+      // Cheap guard against rage-submitting: a few seconds between real grading calls. Never
+      // blocks the cached path above, so re-reading your own last grade is always instant.
+      const wait = cooldownLeft(crewId);
+      if (wait > 0) {
+        apiUsage.cooldownBlocked++;
+        return sendJson(res, 200, {
+          result: { passed: false, score: 0, cooldown: true,
+                    feedback: `Hold up — the judge is catching its breath. Try again in ${Math.ceil(wait / 1000)}s.`,
+                    tip: 'Use the moment to re-read the task and sharpen your answer.', xpAwarded: 0 },
+          member: memberSummary(crewId, member),
+          state: decorate(state),
+        });
+      }
+
+      markGraded(crewId);
       const result = await gradeResponse(step, response, userKey);   // userKey is used transiently, never stored
       const awarded = result.passed ? step.xp : 0;
-      const prev = member.steps[stepId];
       const keepBest = prev && prev.passed && prev.xp >= awarded;
       if (!keepBest) {
-        member.steps[stepId] = { passed: result.passed, score: result.score, xp: awarded, response, feedback: result.feedback, tip: result.tip, at: Date.now() };
+        member.steps[stepId] = { passed: result.passed, score: result.score, xp: awarded, response, feedback: result.feedback, tip: result.tip, offline: !!result.offline, at: Date.now() };
         recomputeXp(member);
         await saveMember(crewId, member);
       } else if (prev.response !== response) {

@@ -79,6 +79,39 @@ days of inactivity, which a play-in-bursts game trips over regularly.
 
 ---
 
+## 🧮 AI grading: making a free key last
+
+Free Gemini quota is counted **per Google Cloud project, not per key** — so a crew
+sharing one key shares one daily allowance. The default model is
+`gemini-2.5-flash-lite` because it has by far the biggest free daily allowance
+(~1,000 requests/day vs ~250 for Flash) and grades short rubric answers fine.
+
+The app avoids the ways this budget normally leaks:
+
+- **Identical re-submissions cost nothing.** Re-submitting the same words replays the
+  saved grade instead of calling the API. Kids re-read and re-submit constantly; this
+  is the single biggest saving.
+- **A short cooldown between graded attempts** (`FORGE_GRADE_COOLDOWN_MS`, default
+  8s) stops a frustrated re-submit spree from draining a day's quota in a minute.
+- **A key test costs exactly one request** against one model, with a 1-token cap. It
+  used to walk the whole fallback chain and spend four.
+- **Retired models are dropped, then remembered.** A model the API rejects is skipped
+  for the rest of the process instead of costing a wasted round-trip on every grade.
+- **Grading output is capped** at 400 tokens — enough for the judge's small JSON,
+  not enough for one bad generation to eat the shared per-minute token budget.
+
+> ⚠️ **Keep retired models out of `FORGE_MODELS`.** Google retires models on a
+> schedule (`gemini-2.0-flash` and `-flash-lite` shut down 2026-06-01;
+> `gemini-2.5-flash` retires 2026-10-16). A dead name in the chain isn't harmless —
+> it costs a wasted round-trip on *every* grade before reaching a model that answers.
+
+`GET /api/admin/health?code=...` reports `apiUsage`, including `cachedGrades` and
+`cooldownBlocked` (calls saved) and `serverKey` vs `ownKey` — if `serverKey` keeps
+climbing, the crew are sharing your quota instead of using their own. Full setup and
+troubleshooting: **`GEMINI_SETUP.md`**.
+
+---
+
 ## 💾 Storage: why sprite art lives outside the database
 
 Generated mob art used to be stored as a base64 `data:` URL *inside* the mob-config

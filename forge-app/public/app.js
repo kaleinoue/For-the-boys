@@ -731,6 +731,11 @@ function renderStep(step){
       STATE = data.state;
       slot.innerHTML=''; slot.appendChild(gradeCard(data.result));
       const r=data.result;
+      // Cooldown isn't a grade and isn't a key problem — show the note and leave everything else alone.
+      if(r.cooldown){ sfx('click'); toast('⏳ Slow down a sec — that saves your AI credits.'); btn.textContent=lbl; return; }
+      // Same answer as last time: this is the saved grade replayed, so no API call and no XP re-burst.
+      if(r.cached){ btn.textContent = r.passed?'⚒ RE-ATTEMPT':'⚔ ATTEMPT';
+        toast('↩ Same answer — showing your saved grade (no AI credits used).'); renderHUD(); renderMap(); return; }
       if(r.offline){ const bk=$('#btn-apikey'); if(bk) bk.textContent='🔑❗'; toast('⚠ Graded offline — real AI grading didn\'t run. Tap 🔑 to re-test your key.'); }
       el.querySelector('.st-state').innerHTML = r.passed?`<span class="ok">✓ cleared · ${r.xpAwarded} XP</span>`:'not cleared — try again';
       btn.textContent = r.passed?'⚒ RE-ATTEMPT':'⚔ ATTEMPT';
