@@ -4,14 +4,14 @@ let ME = localStorage.getItem('forge_crew_id') || null;
 let openQuestId = null;
 let GM_CODE = localStorage.getItem('forge_gm_code') || null;   // Game Master passcode
 let RUBRICS = null;                                            // cached admin rubrics
-let MOBS = { mobs:{}, levels:{} };                             // God-Mode mob DB (custom mobs + level assignments)
+let MOBS = { mobs:{}, levels:{}, terrain:{} };                  // God-Mode mob DB (custom mobs, level spawns, terrain)
 let gmClass = localStorage.getItem('forge_gm_class') || '';    // God Mode: fight as any class style (test override)
 const isGod = () => !!GM_CODE;
 const MAX_LEVEL = 16;                                          // quest indices 0..16
 
 // Fetch the mob DB and merge it into the battle engine so battles + God Mode agree.
 async function loadMobs(){
-  try{ MOBS = await fetch('/api/mobs').then(r=>r.json()); }catch{ MOBS = { mobs:{}, levels:{} }; }
+  try{ MOBS = await fetch('/api/mobs').then(r=>r.json()); }catch{ MOBS = { mobs:{}, levels:{}, terrain:{} }; }
   if(window.BATTLE && window.BATTLE.setMobConfig) window.BATTLE.setMobConfig(MOBS);
 }
 // The full effective roster = base built-ins + custom mobs (custom overrides base by id).
@@ -25,6 +25,7 @@ function allMobs(){
 function applyCfg(r){
   if(r.mobs) MOBS.mobs=r.mobs; if(r.levels) MOBS.levels=r.levels;
   if(r.projectiles) MOBS.projectiles=r.projectiles; if(r.classProjectiles) MOBS.classProjectiles=r.classProjectiles;
+  if(r.terrain) MOBS.terrain=r.terrain;
   window.BATTLE.setMobConfig(MOBS);
 }
 const $ = (s) => document.querySelector(s);
@@ -111,6 +112,7 @@ function renderAdminBar(){
     <label class="gm-actas">Test class: <select id="gm-class">${classOpts}</select></label>
     <button id="gm-mobs" class="pixel-btn ghost">🗿 Mob DB</button>
     <button id="gm-proj" class="pixel-btn ghost">🎯 Projectiles</button>
+    <button id="gm-terrain" class="pixel-btn ghost">🏔 Terrain</button>
     <span class="gm-hint">all trials unlocked · pick a Test class to fight with any style</span>
     <button id="gm-logout" class="pixel-btn ghost">exit GM</button>`;
   $('#gm-actas').onchange = (e)=>{ ME = e.target.value; localStorage.setItem('forge_crew_id',ME); renderHUD(); renderMap(); };
@@ -118,6 +120,7 @@ function renderAdminBar(){
     toast(gmClass?`Test class: ${CL[gmClass].name} (${CL[gmClass].klass})`:'Class: profile default'); renderHUD(); };
   $('#gm-mobs').onclick = ()=>{ sfx('click'); openMobs(); };
   $('#gm-proj').onclick = ()=>{ sfx('click'); openProj(); };
+  $('#gm-terrain').onclick = ()=>{ sfx('click'); openTerrain(); };
   $('#gm-logout').onclick = logoutGM;
 }
 
@@ -318,6 +321,77 @@ async function saveLevelAssign(){
   const r = await fetch('/api/admin/mobs/levels',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,level:lv,mobIds})}).then(x=>x.json()).catch(()=>({error:'network'}));
   if(r.error){ alert(r.error); return; }
   applyCfg(r); sfx('win'); toast(`Level ${lv} spawns saved`); renderMobs();
+}
+
+// ---- God Mode: Terrain (per-level environment) ------------------------------
+// The layout isn't hand-placed, it's GENERATED from these knobs plus a seed —
+// so tuning a level is a handful of numbers instead of a map editor, and the
+// same seed always builds the same map.
+const TERRAIN_TIERS = [
+  [1,'Plain field','the tutorial arena — nothing in your way'],
+  [2,'Solid cover','boulders and crates: block movement, shots AND line of sight'],
+  [3,'Water','pools that slow heroes and melee mobs; shots fly over'],
+  [4,'Shooting towers','enemy turrets that lock on, telegraph, and can be destroyed for loot'],
+  [5,'3D MOBA map','tilted view with real elevation: 3 lanes, a river, bush to vanish in, high-ground bases'],
+];
+const TERRAIN_FIELDS = [
+  ['rocks','Boulders',1],['crates','Crates',1],['pools','Water pools',1],
+  ['towers','Towers',1],['bush','Bush patches',1],['seed','Layout seed',1],
+  ['towerHp','Tower HP',5],['towerRange','Tower range',10],
+  ['towerCd','Tower reload (s)',0.1],['waterSlow','Water speed (1 = no slow)',0.05],
+];
+function terrainBuiltIn(lv){
+  const F=window.ForgeTerrain, key=F.planKey(lv);
+  return Object.assign({}, F.TUNING, F.DEFAULTS[key], {key});
+}
+function terrainOverride(lv){ return (MOBS.terrain||{})[String(lv)]||null; }
+function openTerrain(){ if(!isGod()) return; renderTerrain(); $('#terrain-modal').classList.remove('hidden'); }
+function renderTerrain(){
+  const sel=$('#tr-level');
+  const lv = sel && sel.value!=='' ? +sel.value : 2;
+  const built=terrainBuiltIn(lv), over=terrainOverride(lv), cur=Object.assign({},built,over||{});
+  $('#tr-ladder').innerHTML = TERRAIN_TIERS.map(([n,name,what])=>{
+    const o=terrainOverride(n);
+    return `<div class="mobrow"><b>Level ${n} · ${esc(name)}</b>${o?' <span class="mob-custom">tuned</span>':' <span class="mob-base">built-in</span>'}
+      <small>${esc(what)}</small></div>`;
+  }).join('') + `<div class="mob-warn">Levels 6–${MAX_LEVEL} run the level-5 map at higher difficulty. Editing a level 1–5 also
+    covers every level above it that falls back to that tier.</div>`;
+  sel.innerHTML = Array.from({length:MAX_LEVEL+1},(_,i)=>`<option value="${i}" ${i===lv?'selected':''}>Level ${i}${terrainOverride(i)?' ·tuned':''}</option>`).join('');
+  const tier=TERRAIN_TIERS.find(t=>t[0]===built.key);
+  $('#tr-note').textContent = `built-in: ${tier?tier[1]:'—'}${over?' · currently overridden':''}`;
+  const layout = cur.moba ? 'moba' : cur.mode==='iso' ? 'iso' : 'flat';
+  $('#tr-form').innerHTML = `<label>Layout <select id="tr-layout">
+      <option value="flat" ${layout==='flat'?'selected':''}>Open arena (top-down)</option>
+      <option value="iso" ${layout==='iso'?'selected':''}>Open arena (3D tilt)</option>
+      <option value="moba" ${layout==='moba'?'selected':''}>MOBA map (3D tilt)</option>
+    </select></label>` + TERRAIN_FIELDS.map(([k,label,step])=>
+      `<label>${esc(label)} <input id="tr-${k}" type="number" step="${step}" value="${cur[k]}"/></label>`).join('');
+}
+async function saveTerrain(){
+  const lv=+$('#tr-level').value, layout=$('#tr-layout').value;
+  const def={ mode: layout==='flat'?'flat':'iso' };
+  if(layout==='moba') def.moba=true;
+  for(const [k] of TERRAIN_FIELDS) def[k]=+$('#tr-'+k).value;
+  const r=await fetch('/api/admin/terrain',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,level:lv,def})}).then(x=>x.json()).catch(()=>({error:'network'}));
+  if(r.error){ alert(r.error); return; }
+  applyCfg(r); sfx('win'); toast(`🏔 Level ${lv} terrain saved`); renderTerrain();
+}
+async function resetTerrain(){
+  const lv=+$('#tr-level').value;
+  if(!terrainOverride(lv)){ toast(`Level ${lv} is already the built-in terrain`); return; }
+  if(!confirm(`Reset level ${lv} to the built-in terrain?`)) return;
+  const r=await fetch('/api/admin/terrain',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:GM_CODE,level:lv,def:null})}).then(x=>x.json()).catch(()=>({error:'network'}));
+  if(r.error){ alert(r.error); return; }
+  applyCfg(r); sfx('click'); toast(`Level ${lv} back to built-in`); renderTerrain();
+}
+// Fight the level you're editing, right now — the fastest way to feel a change.
+function testTerrain(){
+  const lv=+$('#tr-level').value;
+  $('#terrain-modal').classList.add('hidden'); stopMusic();
+  const prof=profileOf(ME);
+  window.ForgeBattle.start({ classId: battleClass(), questIndex: lv, equipped: prof.equipped, levels: prof.levels,
+    dialog:[`God Mode: testing the level ${lv} battlefield.`], hasMythic:true, bonusHearts: prof.bonusHearts,
+    onWin: async()=>{}, onContinue: ()=>{ startMusic(); openTerrain(); }, onExit: ()=>{ startMusic(); openTerrain(); } });
 }
 
 // ---- God Mode: Projectiles (shared set, sprite art via same pipeline) -------
@@ -569,6 +643,10 @@ function wireChrome(){
   $('#btn-gm').onclick = ()=>{ initAudio(); loginGM(); };
   $('#btn-keys').onclick = ()=>{ sfx('click'); openKeys(); };
   $('#keys-reset').onclick = ()=>{ localStorage.removeItem('forge_keys'); renderKeys(); };
+  $('#tr-level').onchange = renderTerrain;
+  $('#tr-save').onclick = ()=>{ sfx('click'); saveTerrain(); };
+  $('#tr-reset').onclick = ()=>{ sfx('click'); resetTerrain(); };
+  $('#tr-test').onclick = ()=>{ sfx('click'); testTerrain(); };
   $('#mf-save').onclick = ()=>{ sfx('click'); saveMob(); };
   $('#mf-new').onclick = ()=>{ loadMobForm(null); };
   $('#mf-ai').onchange = ()=> toggleShooterFields();

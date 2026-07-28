@@ -110,6 +110,7 @@ function publicMobCfg(cfg) {
   return {
     mobs: publicDefs(cfg.mobs), levels: cfg.levels || {},
     projectiles: publicDefs(cfg.projectiles), classProjectiles: cfg.classProjectiles || {},
+    terrain: cfg.terrain || {},
   };
 }
 // Every sprite the config still points at — anything else is orphaned art.
@@ -148,6 +149,24 @@ function sanitizeProjectile(m) {
   const sp = extractSprite(m.sprite);
   if (sp) def.spriteId = sp.spriteId;
   return { id, def, pending: sp && sp.pending };
+}
+
+// Validate + clamp the terrain knobs for one level coming from God Mode. These
+// are counts and tuning numbers, not coordinates — terrain.js generates the
+// actual layout from them plus the seed, so a bad value can't produce a broken
+// map, only a boring one.
+function sanitizeTerrain(t) {
+  if (!t || typeof t !== 'object') return null;
+  const num = (v, def, lo, hi) => { v = Number(v); if (!isFinite(v)) v = def; return Math.max(lo, Math.min(hi, Math.round(v * 100) / 100)); };
+  const out = {
+    mode: t.mode === 'iso' ? 'iso' : 'flat',
+    rocks: num(t.rocks, 0, 0, 24), crates: num(t.crates, 0, 0, 24), pools: num(t.pools, 0, 0, 10),
+    towers: num(t.towers, 0, 0, 8), bush: num(t.bush, 0, 0, 12), seed: num(t.seed, 0, 0, 9999),
+    towerHp: num(t.towerHp, 70, 10, 600), towerRange: num(t.towerRange, 250, 60, 900),
+    towerCd: num(t.towerCd, 2.6, 0.4, 12), waterSlow: num(t.waterSlow, 0.45, 0.1, 1),
+  };
+  if (t.moba) out.moba = true;
+  return out;
 }
 
 // Turso (optional, preferred). libSQL over plain HTTP — no client library needed.
@@ -200,7 +219,7 @@ async function sbFetch(pathQuery, opts = {}) {
   return res;
 }
 
-const EMPTY_MOBS = { mobs: {}, levels: {}, projectiles: {}, classProjectiles: {} };
+const EMPTY_MOBS = { mobs: {}, levels: {}, projectiles: {}, classProjectiles: {}, terrain: {} };
 
 // Local file store — sprites become real .png files under data/sprites/.
 const SPRITE_DIR = path.join(__dirname, 'data', 'sprites');
@@ -717,6 +736,17 @@ const server = http.createServer(async (req, res) => {
       await saveMobs(cfg);
       const pub = publicMobCfg(cfg);
       return sendJson(res, 200, { ok: true, mobs: pub.mobs, levels: pub.levels });
+    }
+    if (req.method === 'POST' && url === '/api/admin/terrain') {      // tune a level's environment
+      const { code, level, def } = await readBody(req);
+      if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
+      const lv = String(parseInt(level, 10));
+      if (!/^\d+$/.test(lv)) return sendJson(res, 400, { error: 'Bad level.' });
+      const cfg = await loadMobs(); cfg.terrain = cfg.terrain || {};
+      const clean = def === null ? null : sanitizeTerrain(def);
+      if (clean) cfg.terrain[lv] = clean; else delete cfg.terrain[lv];   // null = back to the built-in level
+      await saveMobs(cfg);
+      return sendJson(res, 200, { ok: true, terrain: publicMobCfg(cfg).terrain });
     }
 
     // ---- Game Master / admin ----

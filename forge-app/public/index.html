@@ -150,6 +150,29 @@
   </div>
 
   <!-- ============ PROJECTILES (God Mode) ============ -->
+  <div id="terrain-modal" class="modal hidden">
+    <div class="modal-card mobs-card">
+      <button class="modal-close" data-close>✕</button>
+      <h2 class="guild-title">🏔 Battlefield Terrain</h2>
+      <div class="mobs-grid">
+        <div class="mobs-col">
+          <h3 class="mobs-h">Environment ladder</h3>
+          <div id="tr-ladder"></div>
+        </div>
+        <div class="mobs-col">
+          <h3 class="mobs-h" id="tr-title">Tune a level</h3>
+          <div class="mlv-top">Editing <select id="tr-level"></select><small id="tr-note"></small></div>
+          <div class="mob-form" id="tr-form"></div>
+          <div class="mob-form-actions">
+            <button id="tr-save" class="pixel-btn">Save terrain</button>
+            <button id="tr-test" class="pixel-btn ghost">⚔ test fight</button>
+            <button id="tr-reset" class="pixel-btn ghost">reset to built-in</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="proj-modal" class="modal hidden">
     <div class="modal-card mobs-card">
       <button class="modal-close" data-close>✕</button>
@@ -227,6 +250,7 @@
   </div>
 
   <script src="battle-data.js"></script>
+  <script src="terrain.js"></script>
   <script src="battle.js"></script>
   <script src="app.js"></script>
 </body>
