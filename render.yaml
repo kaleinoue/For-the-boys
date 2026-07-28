@@ -1,6 +1,6 @@
 # Render Blueprint — deploys the Forge RPG app for free.
 # One-click: https://render.com/deploy?repo=https://github.com/kaleinoue/For-the-boys
-# Then paste your keys (GEMINI_API_KEY, SUPABASE_*) in the Render dashboard.
+# Then paste your keys (GEMINI_API_KEY, TURSO_*) in the Render dashboard.
 services:
   - type: web
     name: the-forge
@@ -13,6 +13,13 @@ services:
     envVars:
       - key: GEMINI_API_KEY
         sync: false             # set in dashboard (secret)
+      # Shared progress. Render's free disk is wiped on restart, so set these —
+      # the server creates its own tables on first boot.
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      # Legacy alternative: only used when the TURSO_* values above are blank.
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_KEY

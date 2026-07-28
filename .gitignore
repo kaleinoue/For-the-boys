@@ -20,6 +20,8 @@ build/
 
 # Forge app runtime data (shared progress store — regenerated at runtime)
 forge-app/data/progress.json
+# Sprite art written by the local-file store (the hosted stores keep their own copy)
+forge-app/data/sprites/
 
 # WhatsApp relay session/cache (never commit — it's a live login to your account)
 whatsapp-relay/.wwebjs_auth/

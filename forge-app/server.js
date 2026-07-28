@@ -8,13 +8,20 @@
 //   - POST /api/grade   -> AI-grades a response, awards XP, saves shared state
 //   - POST /api/reset   -> wipes progress (handy while testing)
 //
-//  Secrets (Gemini key + Supabase service key) live ONLY here on the server,
-//  never in the browser. Storage: Supabase if configured, else a local JSON file.
+//  Secrets (Gemini key + database key) live ONLY here on the server, never in
+//  the browser. Storage backend, in priority order: Turso, Supabase, local file.
+//
+//  Sprite art is NOT stored inside the mob-config blob. Each generated strip is
+//  written once to its own content-hashed record and served as a real PNG from
+//  /api/sprites/<hash>.png with immutable cache headers, so the browser fetches
+//  it once and the database ships kilobytes of JSON instead of megabytes of
+//  base64 on every page load. See README "Storage" for the why.
 // =============================================================================
 
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 // minimal .env loader (no dependency) — reads KEY=value lines from ./.env
 (function loadEnv() {
@@ -45,6 +52,61 @@ const MAX_SPRITE_BYTES = 320 * 1024;  // stored sprite strips are downscaled cli
 const ADMIN_CODE = process.env.ADMIN_CODE || 'forge-gm';
 const adminOK = (code) => !!code && code === ADMIN_CODE;
 
+// ---- sprites ----------------------------------------------------------------
+// Stored defs carry only `spriteId` (a content hash). The bytes live in their own
+// record, and /api/mobs hands the browser a URL. Two mobs generated from the same
+// art therefore cost one copy, and re-saving a mob never re-uploads its sprite.
+const SPRITE_MIME = { 'image/png': 'png', 'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/gif': 'gif' };
+const SPRITE_URL_RE = /^\/api\/sprites\/([a-f0-9]{32})\.[a-z]{3,4}$/;
+
+function parseDataUrl(s) {
+  const m = /^data:([\w/+.-]+);base64,([A-Za-z0-9+/=]+)$/.exec(s || '');
+  if (!m || !SPRITE_MIME[m[1]]) return null;
+  return { mime: m[1], b64: m[2] };
+}
+const spriteHash = (mime, b64) => crypto.createHash('sha256').update(mime + ':' + b64).digest('hex').slice(0, 32);
+const spriteUrl = (id) => `/api/sprites/${id}.png`;
+
+// Turn whatever the editor sent into { spriteId, pending }. `pending` is set only
+// when the bytes are new and still need writing to the store.
+//   - a data: URL      -> freshly generated art
+//   - /api/sprites/... -> the form was re-saved unchanged; reuse what's stored
+function extractSprite(raw) {
+  if (typeof raw !== 'string' || !raw) return null;
+  const hit = SPRITE_URL_RE.exec(raw);
+  if (hit) return { spriteId: hit[1], pending: null };
+  if (raw.length > MAX_SPRITE_BYTES) return null;
+  const d = parseDataUrl(raw);
+  if (!d) return null;
+  const id = spriteHash(d.mime, d.b64);
+  return { spriteId: id, pending: { id, ...d } };
+}
+
+// Swap stored spriteIds for URLs on the way out to the browser. battle.js sets
+// `img.src = def.sprite`, which is happy with a URL or a data: URL alike.
+function publicDefs(defs) {
+  const out = {};
+  for (const id in (defs || {})) {
+    const d = defs[id];
+    out[id] = d && d.spriteId ? { ...omit(d, 'spriteId'), sprite: spriteUrl(d.spriteId) } : d;
+  }
+  return out;
+}
+function omit(obj, key) { const { [key]: _drop, ...rest } = obj; return rest; }
+function publicMobCfg(cfg) {
+  return {
+    mobs: publicDefs(cfg.mobs), levels: cfg.levels || {},
+    projectiles: publicDefs(cfg.projectiles), classProjectiles: cfg.classProjectiles || {},
+  };
+}
+// Every sprite the config still points at — anything else is orphaned art.
+function referencedSprites(cfg) {
+  const ids = new Set();
+  for (const group of [cfg.mobs, cfg.projectiles])
+    for (const id in (group || {})) if (group[id] && group[id].spriteId) ids.add(group[id].spriteId);
+  return ids;
+}
+
 // Validate + clamp a mob definition coming from the God Mode editor.
 function sanitizeMob(m) {
   if (!m || typeof m !== 'object') return null;
@@ -56,12 +118,12 @@ function sanitizeMob(m) {
   const def = { name: String(m.name || id).slice(0, 28), hp: num(m.hp, 20, 1, 100000), atk: num(m.atk, 8, 0, 100000),
     speed: num(m.speed, 70, 5, 600), r: num(m.r, 13, 6, 60), color, ai, power: num(m.power, 1, 1, 4) };  // power = heart damage (heavy = 2+)
   if (ai === 'shooter') { def.shotCd = num(m.shotCd, 1.7, 0.2, 10); def.shotSpd = num(m.shotSpd, 180, 40, 1200); }
-  // Optional animated sprite: a horizontal strip data URL + frame count (walk-cycle from Nano Banana).
-  if (typeof m.sprite === 'string' && m.sprite.startsWith('data:image/') && m.sprite.length <= MAX_SPRITE_BYTES) {
-    def.sprite = m.sprite; def.frames = num(m.frames, 4, 1, 12);
-  }
+  // Optional animated sprite: a horizontal strip (walk-cycle from Nano Banana),
+  // stored by reference so the config blob stays small.
+  const sp = extractSprite(m.sprite);
+  if (sp) { def.spriteId = sp.spriteId; def.frames = num(m.frames, 4, 1, 12); }
   if (typeof m.proj === 'string' && m.proj) { const pid = m.proj.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24); if (pid) def.proj = pid; }  // projectile type for its shots
-  return { id, def };
+  return { id, def, pending: sp && sp.pending };
 }
 // Validate a shared projectile type (sprite + how it flies).
 function sanitizeProjectile(m) {
@@ -70,15 +132,23 @@ function sanitizeProjectile(m) {
   if (!id) return null;
   const num = (v, def, lo, hi) => { v = Number(v); if (!isFinite(v)) v = def; return Math.max(lo, Math.min(hi, Math.round(v * 100) / 100)); };
   const def = { name: String(m.name || id).slice(0, 28), frames: num(m.frames, 1, 1, 12), spin: !!m.spin, size: num(m.size, 16, 6, 60) };
-  if (typeof m.sprite === 'string' && m.sprite.startsWith('data:image/') && m.sprite.length <= MAX_SPRITE_BYTES) def.sprite = m.sprite;
-  return { id, def };
+  const sp = extractSprite(m.sprite);
+  if (sp) def.spriteId = sp.spriteId;
+  return { id, def, pending: sp && sp.pending };
 }
 
-// Supabase (optional). Use the SERVICE ROLE key — server-side only.
+// Turso (optional, preferred). libSQL over plain HTTP — no client library needed.
+// TURSO_DATABASE_URL looks like libsql://name-org.turso.io; we talk https.
+const TURSO_URL = (process.env.TURSO_DATABASE_URL || '').trim().replace(/\/$/, '').replace(/^libsql:\/\//, 'https://');
+const TURSO_TOKEN = (process.env.TURSO_AUTH_TOKEN || '').trim();
+const USE_TURSO = !!(TURSO_URL && TURSO_TOKEN);
+
+// Supabase (optional, legacy). Use the SERVICE ROLE key — server-side only.
 const SB_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || '';
-const USE_SUPABASE = !!(SB_URL && SB_KEY);
+const USE_SUPABASE = !USE_TURSO && !!(SB_URL && SB_KEY);
 const SB_TABLE = process.env.SUPABASE_TABLE || 'forge_progress';
+const SB_SPRITES = process.env.SUPABASE_SPRITE_TABLE || 'forge_sprites';
 
 // ---- indexes / helpers ------------------------------------------------------
 const stepIndex = {};
@@ -118,12 +188,123 @@ async function sbFetch(pathQuery, opts = {}) {
 }
 
 const EMPTY_MOBS = { mobs: {}, levels: {}, projectiles: {}, classProjectiles: {} };
+
+// Local file store — sprites become real .png files under data/sprites/.
+const SPRITE_DIR = path.join(__dirname, 'data', 'sprites');
 const fileStore = {
   async getAll() { try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { return emptyState(); } },
   async putMember(id, member) { const s = await this.getAll(); s.crew[id] = member; fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2)); },
   async resetAll() { const s = await this.getAll(); fs.writeFileSync(STATE_FILE, JSON.stringify({ ...emptyState(), mobs: s.mobs || EMPTY_MOBS }, null, 2)); },
   async getMobs() { const s = await this.getAll(); return s.mobs || { ...EMPTY_MOBS }; },
   async putMobs(cfg) { const s = await this.getAll(); s.mobs = cfg; fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2)); },
+  async getSprite(id) {
+    try {
+      const meta = JSON.parse(fs.readFileSync(path.join(SPRITE_DIR, `${id}.json`), 'utf8'));
+      return { mime: meta.mime, buf: fs.readFileSync(path.join(SPRITE_DIR, `${id}.bin`)) };
+    } catch { return null; }
+  },
+  async putSprite(s) {
+    fs.mkdirSync(SPRITE_DIR, { recursive: true });
+    fs.writeFileSync(path.join(SPRITE_DIR, `${s.id}.bin`), Buffer.from(s.b64, 'base64'));
+    fs.writeFileSync(path.join(SPRITE_DIR, `${s.id}.json`), JSON.stringify({ mime: s.mime }));
+  },
+  async pruneSprites(keep) {
+    let files; try { files = fs.readdirSync(SPRITE_DIR); } catch { return 0; }
+    let n = 0;
+    for (const f of files) {
+      const id = f.replace(/\.(bin|json)$/, '');
+      if (/^[a-f0-9]{32}$/.test(id) && !keep.has(id)) { try { fs.unlinkSync(path.join(SPRITE_DIR, f)); n++; } catch {} }
+    }
+    return n;
+  },
+};
+
+// ---- Turso (libSQL HTTP API) -----------------------------------------------
+// One POST carries a batch of statements; no driver, no dependency.
+const tArg = (v) => v === null || v === undefined ? { type: 'null' }
+  : typeof v === 'number' ? (Number.isInteger(v) ? { type: 'integer', value: String(v) } : { type: 'float', value: v })
+  : { type: 'text', value: String(v) };
+const sql = (text, ...args) => ({ sql: text, args: args.map(tArg) });
+
+function tursoRows(result) {
+  const cols = (result.cols || []).map(c => c.name);
+  return (result.rows || []).map(row => {
+    const o = {};
+    row.forEach((cell, i) => { o[cols[i]] = cell.type === 'null' ? null : cell.type === 'integer' ? Number(cell.value) : cell.value; });
+    return o;
+  });
+}
+async function tursoRun(...stmts) {
+  const res = await fetch(`${TURSO_URL}/v2/pipeline`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${TURSO_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [...stmts.map(s => ({ type: 'execute', stmt: typeof s === 'string' ? { sql: s } : s })), { type: 'close' }] }),
+  });
+  if (!res.ok) throw new Error(`Turso ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const body = await res.json();
+  const out = [];
+  for (const r of body.results || []) {
+    if (r.type === 'error') throw new Error(`Turso SQL: ${(r.error && r.error.message) || 'unknown'}`);
+    if (r.response && r.response.type === 'execute') out.push(tursoRows(r.response.result));
+  }
+  return out;
+}
+// Create the schema on boot so setup is just two env vars.
+async function tursoInit() {
+  await tursoRun(
+    `create table if not exists forge_progress (
+       crew_id text primary key, xp integer not null default 0,
+       steps text not null default '{}', updated_at text)`,
+    `create table if not exists forge_sprites (
+       id text primary key, mime text not null, data text not null, created_at text)`,
+  );
+}
+
+const tursoStore = {
+  async getAll() {
+    const [rows] = await tursoRun(sql(`select crew_id, xp, steps from forge_progress`));
+    const s = emptyState();
+    for (const r of rows) if (s.crew[r.crew_id]) s.crew[r.crew_id] = { xp: r.xp || 0, steps: safeJson(r.steps, {}) };
+    return s;
+  },
+  async putMember(id, member) {
+    await tursoRun(sql(
+      `insert into forge_progress (crew_id, xp, steps, updated_at) values (?, ?, ?, ?)
+         on conflict(crew_id) do update set xp = excluded.xp, steps = excluded.steps, updated_at = excluded.updated_at`,
+      id, member.xp, JSON.stringify(member.steps), new Date().toISOString()));
+  },
+  async resetAll() {
+    await tursoRun(...CREW.map(c => sql(
+      `insert into forge_progress (crew_id, xp, steps, updated_at) values (?, 0, '{}', ?)
+         on conflict(crew_id) do update set xp = 0, steps = '{}', updated_at = excluded.updated_at`,
+      c.id, new Date().toISOString())));
+  },
+  // Mob DB lives in a reserved row (crew_id '__mobs'); getAll ignores it since it isn't a real crew id.
+  async getMobs() {
+    const [rows] = await tursoRun(sql(`select steps from forge_progress where crew_id = '__mobs'`));
+    return rows[0] ? safeJson(rows[0].steps, { ...EMPTY_MOBS }) : { ...EMPTY_MOBS };
+  },
+  async putMobs(cfg) {
+    await tursoRun(sql(
+      `insert into forge_progress (crew_id, xp, steps, updated_at) values ('__mobs', 0, ?, ?)
+         on conflict(crew_id) do update set steps = excluded.steps, updated_at = excluded.updated_at`,
+      JSON.stringify(cfg), new Date().toISOString()));
+  },
+  async getSprite(id) {
+    const [rows] = await tursoRun(sql(`select mime, data from forge_sprites where id = ?`, id));
+    return rows[0] ? { mime: rows[0].mime, buf: Buffer.from(rows[0].data, 'base64') } : null;
+  },
+  async putSprite(s) {
+    await tursoRun(sql(
+      `insert into forge_sprites (id, mime, data, created_at) values (?, ?, ?, ?) on conflict(id) do nothing`,
+      s.id, s.mime, s.b64, new Date().toISOString()));
+  },
+  async pruneSprites(keep) {
+    const [rows] = await tursoRun(sql(`select id from forge_sprites`));
+    const dead = rows.map(r => r.id).filter(id => !keep.has(id));
+    if (dead.length) await tursoRun(...dead.map(id => sql(`delete from forge_sprites where id = ?`, id)));
+    return dead.length;
+  },
 };
 
 const supabaseStore = {
@@ -152,9 +333,91 @@ const supabaseStore = {
   async putMobs(cfg) {
     await sbFetch(SB_TABLE, { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ crew_id: '__mobs', xp: 0, steps: cfg, updated_at: new Date().toISOString() }]) });
   },
+  async getSprite(id) {
+    const rows = await (await sbFetch(`${SB_SPRITES}?id=eq.${encodeURIComponent(id)}&select=mime,data`)).json();
+    return rows[0] ? { mime: rows[0].mime, buf: Buffer.from(rows[0].data, 'base64') } : null;
+  },
+  async putSprite(s) {
+    await sbFetch(SB_SPRITES, {
+      method: 'POST',
+      headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+      body: JSON.stringify([{ id: s.id, mime: s.mime, data: s.b64, created_at: new Date().toISOString() }]),
+    });
+  },
+  async pruneSprites(keep) {
+    const rows = await (await sbFetch(`${SB_SPRITES}?select=id`)).json();
+    const dead = rows.map(r => r.id).filter(id => !keep.has(id));
+    for (const id of dead) await sbFetch(`${SB_SPRITES}?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+    return dead.length;
+  },
 };
 
-const store = USE_SUPABASE ? supabaseStore : fileStore;
+const store = USE_TURSO ? tursoStore : USE_SUPABASE ? supabaseStore : fileStore;
+const STORAGE_NAME = USE_TURSO ? 'turso' : USE_SUPABASE ? 'supabase' : 'file';
+function safeJson(v, fallback) {
+  if (v && typeof v === 'object') return v;
+  try { return JSON.parse(v); } catch { return fallback; }
+}
+
+// ---- caches ----------------------------------------------------------------
+// The app is a single instance (Render free tier), and every write goes through
+// this process, so an in-memory copy is authoritative between writes. The short
+// TTL is just a safety net in case the process isn't the only writer.
+const STATE_TTL_MS = 5000;
+let stateCache = null, stateCacheAt = 0;
+let mobCache = null;
+
+async function loadState() {
+  if (stateCache && Date.now() - stateCacheAt < STATE_TTL_MS) return stateCache;
+  stateCache = await store.getAll(); stateCacheAt = Date.now();
+  return stateCache;
+}
+async function saveMember(id, member) { await store.putMember(id, member); stateCache = null; }
+async function resetState() { await store.resetAll(); stateCache = null; }
+
+// Configs written before the sprite split carry the whole data: URL inline. Move
+// those into sprite records the first time we read them, then rewrite once. After
+// that the blob is small and this is a no-op.
+async function migrateInlineSprites(cfg) {
+  let moved = 0;
+  for (const group of [cfg.mobs, cfg.projectiles]) {
+    for (const id in (group || {})) {
+      const d = group[id];
+      if (!d || typeof d.sprite !== 'string' || !d.sprite.startsWith('data:image/')) continue;
+      const parsed = parseDataUrl(d.sprite);
+      delete d.sprite;                       // drop it either way — inline art is what blew the quota
+      if (!parsed) continue;
+      const sid = spriteHash(parsed.mime, parsed.b64);
+      await store.putSprite({ id: sid, ...parsed });
+      d.spriteId = sid; moved++;
+    }
+  }
+  return moved;
+}
+async function loadMobs() {
+  if (mobCache) return mobCache;
+  const cfg = await store.getMobs();
+  const moved = await migrateInlineSprites(cfg);
+  mobCache = cfg;
+  if (moved) { console.log(`🖼  Migrated ${moved} inline sprite(s) out of the mob config.`); await saveMobs(cfg); }
+  return mobCache;
+}
+// Persist the config, remember it, and drop art nothing points at any more.
+async function saveMobs(cfg) {
+  await store.putMobs(cfg);
+  mobCache = cfg;
+  try { await store.pruneSprites(referencedSprites(cfg)); } catch (e) { console.warn('sprite prune failed:', e.message); }
+}
+async function saveSprite(pending) { if (pending) await store.putSprite(pending); }
+
+// Sprite bytes are immutable and small in number — keep the decoded buffers hot.
+const spriteMem = new Map();
+async function loadSprite(id) {
+  if (spriteMem.has(id)) return spriteMem.get(id);
+  const s = await store.getSprite(id);
+  if (s && spriteMem.size < 200) spriteMem.set(id, s);
+  return s;
+}
 
 // ---- the AI judge -----------------------------------------------------------
 async function gradeResponse(step, response, userKey) {
@@ -297,21 +560,29 @@ const server = http.createServer(async (req, res) => {
   const url = req.url.split('?')[0];
   try {
     if (req.method === 'GET' && url === '/api/quests') return sendJson(res, 200, publicQuests());
-    if (req.method === 'GET' && url === '/api/state') return sendJson(res, 200, decorate(await store.getAll()));
+    if (req.method === 'GET' && url === '/api/state') return sendJson(res, 200, decorate(await loadState()));
 
     // ---- Mob database ----
-    if (req.method === 'GET' && url === '/api/mobs') {
-      const cfg = await store.getMobs();
-      return sendJson(res, 200, { mobs: cfg.mobs || {}, levels: cfg.levels || {}, projectiles: cfg.projectiles || {}, classProjectiles: cfg.classProjectiles || {} });
+    if (req.method === 'GET' && url === '/api/mobs') return sendJson(res, 200, publicMobCfg(await loadMobs()));
+    // Sprite bytes: content-hashed, so the URL never changes meaning — cache hard.
+    if (req.method === 'GET' && url.startsWith('/api/sprites/')) {
+      const hit = SPRITE_URL_RE.exec(url);
+      if (!hit) { res.writeHead(404); return res.end('Not found'); }
+      const s = await loadSprite(hit[1]);
+      if (!s) { res.writeHead(404); return res.end('Not found'); }
+      res.writeHead(200, { 'Content-Type': s.mime, 'Content-Length': s.buf.length, 'Cache-Control': 'public, max-age=31536000, immutable' });
+      return res.end(s.buf);
     }
     if (req.method === 'POST' && url === '/api/admin/mobs') {          // create / edit a mob
       const { code, mob } = await readBody(req);
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
       const s = sanitizeMob(mob);
       if (!s) return sendJson(res, 400, { error: 'Invalid mob (need at least an id).' });
-      const cfg = await store.getMobs(); cfg.mobs = cfg.mobs || {}; cfg.mobs[s.id] = s.def;
-      await store.putMobs(cfg);
-      return sendJson(res, 200, { ok: true, id: s.id, mobs: cfg.mobs, levels: cfg.levels || {} });
+      await saveSprite(s.pending);   // art first, so the config never points at missing bytes
+      const cfg = await loadMobs(); cfg.mobs = cfg.mobs || {}; cfg.mobs[s.id] = s.def;
+      await saveMobs(cfg);
+      const pub = publicMobCfg(cfg);
+      return sendJson(res, 200, { ok: true, id: s.id, mobs: pub.mobs, levels: pub.levels });
     }
     if (req.method === 'POST' && url === '/api/admin/mobs/generate') { // Nano Banana sprite generation (uses caller's key)
       const { code, key, prompt } = await readBody(req);
@@ -334,51 +605,57 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url === '/api/admin/mobs/delete') {   // remove a custom mob / override
       const { code, id } = await readBody(req);
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
-      const cfg = await store.getMobs(); if (cfg.mobs) delete cfg.mobs[id];
+      const cfg = await loadMobs(); if (cfg.mobs) delete cfg.mobs[id];
       for (const lv in (cfg.levels || {})) cfg.levels[lv] = (cfg.levels[lv] || []).filter(x => x !== id);
-      await store.putMobs(cfg);
-      return sendJson(res, 200, { ok: true, mobs: cfg.mobs || {}, levels: cfg.levels || {} });
+      await saveMobs(cfg);
+      const pub = publicMobCfg(cfg);
+      return sendJson(res, 200, { ok: true, mobs: pub.mobs, levels: pub.levels });
     }
     if (req.method === 'POST' && url === '/api/admin/projectiles') {   // create / edit a shared projectile type
       const { code, proj } = await readBody(req);
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
       const s = sanitizeProjectile(proj);
       if (!s) return sendJson(res, 400, { error: 'Invalid projectile (need at least an id).' });
-      const cfg = await store.getMobs(); cfg.projectiles = cfg.projectiles || {}; cfg.projectiles[s.id] = s.def;
-      await store.putMobs(cfg);
-      return sendJson(res, 200, { ok: true, id: s.id, projectiles: cfg.projectiles, classProjectiles: cfg.classProjectiles || {} });
+      await saveSprite(s.pending);
+      const cfg = await loadMobs(); cfg.projectiles = cfg.projectiles || {}; cfg.projectiles[s.id] = s.def;
+      await saveMobs(cfg);
+      const pub = publicMobCfg(cfg);
+      return sendJson(res, 200, { ok: true, id: s.id, projectiles: pub.projectiles, classProjectiles: pub.classProjectiles });
     }
     if (req.method === 'POST' && url === '/api/admin/projectiles/delete') {
       const { code, id } = await readBody(req);
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
-      const cfg = await store.getMobs();
+      const cfg = await loadMobs();
       if (cfg.projectiles) delete cfg.projectiles[id];
       for (const k in (cfg.classProjectiles || {})) if (cfg.classProjectiles[k] === id) delete cfg.classProjectiles[k];
       for (const mid in (cfg.mobs || {})) if (cfg.mobs[mid] && cfg.mobs[mid].proj === id) delete cfg.mobs[mid].proj;
-      await store.putMobs(cfg);
-      return sendJson(res, 200, { ok: true, projectiles: cfg.projectiles || {}, classProjectiles: cfg.classProjectiles || {}, mobs: cfg.mobs || {} });
+      await saveMobs(cfg);
+      const pub = publicMobCfg(cfg);
+      return sendJson(res, 200, { ok: true, projectiles: pub.projectiles, classProjectiles: pub.classProjectiles, mobs: pub.mobs });
     }
     if (req.method === 'POST' && url === '/api/admin/projectiles/classassign') {  // give a hero class a projectile
       const { code, classId, projId } = await readBody(req);
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
       const cid = String(classId || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
       if (!cid) return sendJson(res, 400, { error: 'Bad class.' });
-      const cfg = await store.getMobs(); cfg.classProjectiles = cfg.classProjectiles || {};
+      const cfg = await loadMobs(); cfg.classProjectiles = cfg.classProjectiles || {};
       const pid = String(projId || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
       if (pid) cfg.classProjectiles[cid] = pid; else delete cfg.classProjectiles[cid];
-      await store.putMobs(cfg);
-      return sendJson(res, 200, { ok: true, classProjectiles: cfg.classProjectiles, projectiles: cfg.projectiles || {} });
+      await saveMobs(cfg);
+      const pub = publicMobCfg(cfg);
+      return sendJson(res, 200, { ok: true, classProjectiles: pub.classProjectiles, projectiles: pub.projectiles });
     }
     if (req.method === 'POST' && url === '/api/admin/mobs/levels') {   // assign which mobs spawn at a level
       const { code, level, mobIds } = await readBody(req);
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
       const lv = String(parseInt(level, 10));
       if (!/^\d+$/.test(lv)) return sendJson(res, 400, { error: 'Bad level.' });
-      const cfg = await store.getMobs(); cfg.levels = cfg.levels || {};
+      const cfg = await loadMobs(); cfg.levels = cfg.levels || {};
       const ids = Array.isArray(mobIds) ? [...new Set(mobIds.map(String))].slice(0, 24) : [];
       if (ids.length) cfg.levels[lv] = ids; else delete cfg.levels[lv];
-      await store.putMobs(cfg);
-      return sendJson(res, 200, { ok: true, mobs: cfg.mobs || {}, levels: cfg.levels });
+      await saveMobs(cfg);
+      const pub = publicMobCfg(cfg);
+      return sendJson(res, 200, { ok: true, mobs: pub.mobs, levels: pub.levels });
     }
 
     // ---- Game Master / admin ----
@@ -396,18 +673,18 @@ const server = http.createServer(async (req, res) => {
       const { code, crewId, stepId } = await readBody(req);
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
       const step = stepIndex[stepId];
-      const state = await store.getAll();
+      const state = await loadState();
       const member = state.crew[crewId];
       if (!step || !member) return sendJson(res, 400, { error: 'Unknown crew member or step.' });
       member.steps[stepId] = { passed: true, score: 100, xp: step.xp, response: '[force-cleared by GM]', feedback: 'Force-cleared by the Game Master.', tip: '', at: Date.now() };
       recomputeXp(member);
-      await store.putMember(crewId, member);
+      await saveMember(crewId, member);
       return sendJson(res, 200, { ok: true, state: decorate(state) });
     }
     // ---- battle / inventory ----
     if (req.method === 'POST' && url === '/api/battle/win') {
       const { crewId, questId, xp, loot } = await readBody(req);
-      const state = await store.getAll(); const m = state.crew[crewId];
+      const state = await loadState(); const m = state.crew[crewId];
       if (!m) return sendJson(res, 400, { error: 'Unknown crew member.' });
       const prof = getProfile(m);
       const items = (Array.isArray(loot) ? loot : []).filter(id => GEARDATA.GEAR[id]).slice(0, 8);
@@ -422,12 +699,12 @@ const server = http.createServer(async (req, res) => {
         gotHeart = true;
         m.steps['battle:' + questId] = { xp: Math.max(0, Math.round(+xp || 0)), at: Date.now(), cleared: true };
       }
-      recomputeXp(m); await store.putMember(crewId, m);
+      recomputeXp(m); await saveMember(crewId, m);
       return sendJson(res, 200, { ok: true, gained: items, gotHeart, bonusHearts: prof.bonusHearts, state: decorate(state) });
     }
     if (req.method === 'POST' && url === '/api/profile/equip') {
       const { crewId, slot, itemId } = await readBody(req);
-      const state = await store.getAll(); const m = state.crew[crewId];
+      const state = await loadState(); const m = state.crew[crewId];
       if (!m) return sendJson(res, 400, { error: 'Unknown crew member.' });
       const prof = getProfile(m);
       if (itemId) {
@@ -439,12 +716,12 @@ const server = http.createServer(async (req, res) => {
         if (!prof.inventory.includes(itemId)) return sendJson(res, 400, { error: 'Not in inventory.' });
         prof.equipped[slot] = itemId;
       } else { delete prof.equipped[slot]; }
-      await store.putMember(crewId, m);
+      await saveMember(crewId, m);
       return sendJson(res, 200, { ok: true, state: decorate(state) });
     }
     if (req.method === 'POST' && url === '/api/profile/scrap') {
       const { crewId, itemId } = await readBody(req);
-      const state = await store.getAll(); const m = state.crew[crewId];
+      const state = await loadState(); const m = state.crew[crewId];
       if (!m) return sendJson(res, 400, { error: 'Unknown crew member.' });
       const g = GEARDATA.GEAR[itemId];
       if (!g) return sendJson(res, 400, { error: 'Unknown item.' });
@@ -456,25 +733,25 @@ const server = http.createServer(async (req, res) => {
       if (!prof.inventory.includes(itemId)) for (const s in prof.equipped) if (prof.equipped[s] === itemId) delete prof.equipped[s];
       const value = GEARDATA.SCRAP_VALUE[g.tier] || 0;
       prof.gold = (prof.gold || 0) + value;
-      await store.putMember(crewId, m);
+      await saveMember(crewId, m);
       return sendJson(res, 200, { ok: true, value, gold: prof.gold, state: decorate(state) });
     }
     if (req.method === 'POST' && url === '/api/admin/setxp') {
       const { code, crewId, xp } = await readBody(req);
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
-      const state = await store.getAll(); const m = state.crew[crewId];
+      const state = await loadState(); const m = state.crew[crewId];
       if (!m) return sendJson(res, 400, { error: 'Unknown crew member.' });
       const target = Math.max(0, Math.round(+xp || 0));           // no XP cap
       // XP is derived from step xp; a "gm:xp" step holds the admin adjustment.
       const base = Object.entries(m.steps).reduce((s, [k, v]) => s + ((k.startsWith('__') || k === 'gm:xp') ? 0 : (v.xp || 0)), 0);
       const delta = target - base;
       if (delta !== 0) m.steps['gm:xp'] = { xp: delta, at: Date.now() }; else delete m.steps['gm:xp'];
-      recomputeXp(m); await store.putMember(crewId, m);
+      recomputeXp(m); await saveMember(crewId, m);
       return sendJson(res, 200, { ok: true, xp: m.xp, state: decorate(state) });
     }
     if (req.method === 'POST' && url === '/api/profile/sellall') {
       const { crewId } = await readBody(req);
-      const state = await store.getAll(); const m = state.crew[crewId];
+      const state = await loadState(); const m = state.crew[crewId];
       if (!m) return sendJson(res, 400, { error: 'Unknown crew member.' });
       const prof = getProfile(m);
       const keep = {}; for (const id of Object.values(prof.equipped)) keep[id] = (keep[id] || 0) + 1;  // keep equipped copies
@@ -486,12 +763,12 @@ const server = http.createServer(async (req, res) => {
         else { gained += GEARDATA.SCRAP_VALUE[g.tier] || 0; sold++; }
       }
       prof.inventory = newInv; prof.gold = (prof.gold || 0) + gained;
-      await store.putMember(crewId, m);
+      await saveMember(crewId, m);
       return sendJson(res, 200, { ok: true, sold, gained, gold: prof.gold, state: decorate(state) });
     }
     if (req.method === 'POST' && url === '/api/profile/upgrade') {
       const { crewId, itemId } = await readBody(req);
-      const state = await store.getAll(); const m = state.crew[crewId];
+      const state = await loadState(); const m = state.crew[crewId];
       if (!m) return sendJson(res, 400, { error: 'Unknown crew member.' });
       const prof = getProfile(m); const g = GEARDATA.GEAR[itemId]; const r = GEARDATA.UPGRADE[itemId];
       if (r) {                                                   // tier upgrade (Common/Rare -> next tier)
@@ -502,7 +779,7 @@ const server = http.createServer(async (req, res) => {
         prof.inventory = prof.inventory.filter(x => { if (x === itemId && removed < r.need) { removed++; return false; } return true; });
         if (!prof.inventory.includes(itemId)) for (const s in prof.equipped) if (prof.equipped[s] === itemId) delete prof.equipped[s];
         prof.gold -= r.gold; prof.inventory.push(r.to);
-        await store.putMember(crewId, m);
+        await saveMember(crewId, m);
         return sendJson(res, 200, { ok: true, made: r.to, gold: prof.gold, state: decorate(state) });
       }
       if (g && g.tier === 'Legendary') {                         // level up a Legendary (stronger, same item)
@@ -516,7 +793,7 @@ const server = http.createServer(async (req, res) => {
         let removed = 0;
         prof.inventory = prof.inventory.filter(x => { if (x === fodder && removed < need) { removed++; return false; } return true; });
         prof.gold -= cost; prof.levels[itemId] = level + 1;
-        await store.putMember(crewId, m);
+        await saveMember(crewId, m);
         return sendJson(res, 200, { ok: true, leveled: itemId, level: level + 1, gold: prof.gold, state: decorate(state) });
       }
       return sendJson(res, 400, { error: 'That item cannot be upgraded.' });
@@ -524,7 +801,11 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/api/admin/health') {
       const code = new URL(req.url, 'http://x').searchParams.get('code');
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
-      return sendJson(res, 200, { storage: USE_SUPABASE ? 'supabase' : 'file', model: MODEL, gemini: await geminiPing() });
+      const cfg = await loadMobs();
+      return sendJson(res, 200, {
+        storage: STORAGE_NAME, model: MODEL, gemini: await geminiPing(),
+        sprites: referencedSprites(cfg).size, configBytes: JSON.stringify(cfg).length,
+      });
     }
     // "Test my key" for the in-app API-key panel. The key is checked live and NOT stored anywhere.
     if (req.method === 'POST' && url === '/api/verify-key') {
@@ -534,13 +815,13 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url === '/api/reset') {
       const { code } = await readBody(req);
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Reset requires the Game Master passcode.' });
-      await store.resetAll();
-      return sendJson(res, 200, decorate(await store.getAll()));
+      await resetState();
+      return sendJson(res, 200, decorate(await loadState()));
     }
     if (req.method === 'POST' && url === '/api/grade') {
       const { crewId, stepId, response, userKey } = await readBody(req);
       const step = stepIndex[stepId];
-      const state = await store.getAll();
+      const state = await loadState();
       const member = state.crew[crewId];
       if (!step || !member) return sendJson(res, 400, { error: 'Unknown crew member or step.' });
 
@@ -551,11 +832,11 @@ const server = http.createServer(async (req, res) => {
       if (!keepBest) {
         member.steps[stepId] = { passed: result.passed, score: result.score, xp: awarded, response, feedback: result.feedback, tip: result.tip, at: Date.now() };
         recomputeXp(member);
-        await store.putMember(crewId, member);
+        await saveMember(crewId, member);
       } else if (prev.response !== response) {
         // Keep the better score/XP, but remember the student's latest writing so it persists.
         member.steps[stepId] = { ...prev, response };
-        await store.putMember(crewId, member);
+        await saveMember(crewId, member);
       }
       return sendJson(res, 200, {
         result: { ...result, xpAwarded: keepBest ? prev.xp : awarded, alreadyBetter: keepBest },
@@ -571,8 +852,13 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
+  const storageNote = USE_TURSO ? 'Turso (shared, cross-device)'
+    : USE_SUPABASE ? 'Supabase (shared, cross-device)'
+    : 'local file (single server only)';
   console.log(`\n🔥 THE FORGE app running:  http://localhost:${PORT}`);
-  console.log(`   Storage: ${USE_SUPABASE ? 'Supabase (shared, cross-device)' : 'local file (single server only)'}`);
+  console.log(`   Storage: ${storageNote}`);
   console.log(`   AI judge: ${GEMINI_KEY ? 'Gemini (live)' : 'OFFLINE mock (set GEMINI_API_KEY for real grading)'}`);
   console.log(`   Game Master passcode: ${process.env.ADMIN_CODE ? '(set via ADMIN_CODE)' : "DEFAULT 'forge-gm' — set ADMIN_CODE to change"}\n`);
+  // Turso creates its own schema, so setup is just the two env vars.
+  if (USE_TURSO) tursoInit().catch(e => console.error('Turso init failed:', e.message));
 });
