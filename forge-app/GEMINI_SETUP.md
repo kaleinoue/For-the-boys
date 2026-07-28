@@ -4,7 +4,43 @@ The app grades players' answers with Google's **Gemini** AI. That needs one free
 API key, stored **on the server** (never in the browser). Without it, the app still
 runs but uses a basic "offline" grader instead of real AI feedback.
 
-There's **one key for the whole app** (it lives on the server), not one per kid.
+The server key is a **fallback for the whole app**. For a crew of four, you want
+**one key per kid** — read the next section for why that matters a lot.
+
+---
+
+## ⚡ Read this first: why a free key "runs out instantly"
+
+Free-tier quota is counted **per Google Cloud project**, *not per API key*. Two keys
+made in the same project share one allowance. So if the whole crew plays on the
+server key — or everyone made their key in the same default project — four kids are
+drawing down **one** daily budget, and it empties roughly four times faster.
+
+Current free-tier allowances (they get cut periodically, so check the link below):
+
+| Model | Requests/min | **Requests/day** |
+|---|---|---|
+| `gemini-2.5-flash-lite` ← the app's default | 15 | **~1,000** |
+| `gemini-2.5-flash` | 10 | ~250 |
+| `gemini-2.5-flash-image` (sprite art) | 10 | ~500 |
+
+**What to do:**
+
+1. **Give each kid their own key in their own project.** In AI Studio, use
+   *Create API key → **Create key in new project***. Four separate projects = four
+   separate daily allowances. Each kid pastes theirs into the app via the **🔑**
+   button; it stays in their browser and is used for their own grading.
+2. **Leave the server key set as a backup**, but expect it to be the shared one that
+   runs dry first.
+3. **Check where the quota is going.** The health URL below reports `apiUsage`. If
+   `serverKey` keeps climbing while `ownKey` stays near zero, the crew haven't added
+   their own keys yet — that's your problem right there.
+
+Current limits: <https://ai.google.dev/gemini-api/docs/rate-limits>
+
+> The app already avoids the obvious waste: identical re-submissions replay the saved
+> grade without calling the API, there's a short cooldown between graded attempts, and
+> a key test costs exactly one request. See the README section "AI grading".
 
 ---
 
@@ -12,7 +48,8 @@ There's **one key for the whole app** (it lives on the server), not one per kid.
 
 1. Go to **https://aistudio.google.com/apikey**
 2. Sign in with a Google account.
-3. Click **"Create API key"** (accept the default project if it asks).
+3. Click **"Create API key"**. If you're making keys for more than one person, pick
+   **"Create key in new project"** each time — see the quota note above.
 4. A key appears that starts with **`AIza...`**. Click the **copy icon** to copy it.
    - ⚠️ Copy with the button, not by highlighting — highlighting can grab a stray
      space and break it.
@@ -47,9 +84,17 @@ https://the-forge-yy5i.onrender.com/api/admin/health?code=YOURCODE
 
 - `"gemini":{"keyPresent":true,"ok":true}` → 🎉 real AI grading is on.
 - `"keyPresent":false` → the key isn't reaching the app (see the ⚠️ note above).
-- `"ok":false,"status":429` → the key works but hit the **free daily limit**;
-  it resets (per-minute in ~1 min, per-day at midnight Pacific).
+- `"ok":false,"status":429` → the key works but is capped right now. `"limit":"perDay"`
+  resets at midnight Pacific; `"perMinute"` clears in about a minute.
 - `"status":400 / API_KEY_INVALID` → the pasted value is wrong; re-copy it.
+- `"apiUsage"` → where the quota went since the app last restarted:
+  - `grade` — real grading calls made
+  - `cachedGrades` — re-submissions served from the saved grade (**free**)
+  - `cooldownBlocked` — rapid re-submits refused before spending a call (**free**)
+  - `image` — sprite generations (these hit the image quota)
+  - `serverKey` vs `ownKey` — how many calls used *your* key vs the kids' own keys
+- `"retiredModels"` → names the API rejected as unavailable. If a model you set in
+  `FORGE_MODELS` shows up here, drop it — Google retires models on a schedule.
 
 ---
 
@@ -71,12 +116,24 @@ Only needed if you run the app on your own computer (`node server.js`).
 
 ## FAQ
 
-- **Do the boys each need a key?** Not required — one key on the server powers
-  everyone. But each player *can* add their **own** free key in the app via the
-  **🔑** button (also the required first Q0 step). Their key is saved only in their
-  browser, sent with each grade request, and never stored on the server — handy
-  when the shared server key hits its free daily limit, or if you never set one.
-- **Is it really free?** Yes, on the free tier. Heavy use can hit daily limits
-  (grading just falls back to the offline grader until it resets).
-- **Where do I change it later?** Same place: Render → the-forge → Environment →
+- **Do the boys each need a key?** Strictly, no — the server key powers everyone. But
+  **yes, you want them to**, each created in its own project. Free quota is per
+  project, so four kids on the server key share one daily allowance and drain it four
+  times faster. Each player adds their own key via the **🔑** button (also the first
+  Q0 step). It's saved only in their browser, sent with each grade request, and never
+  stored on the server.
+- **Is it really free?** Yes, on the free tier. Heavy use can hit daily limits, and
+  grading falls back to the offline grader until it resets — no charge either way,
+  since a free-tier key with no billing attached simply gets refused, never billed.
+- **The app said my daily limit is gone but I barely used it.** Check `apiUsage` on
+  the health URL. Common causes: the crew are all on the server key (one shared
+  project), or sprite generation in God Mode — image calls are much scarcer than
+  grading calls (~500/day) and each "regenerate" spends one.
+- **Grading feels stale / it didn't re-grade.** Submitting the *exact same words*
+  replays your saved grade instead of spending a call. Change the answer to get a
+  fresh grade.
+- **Can I change which model grades?** Set `FORGE_MODELS` to a comma-separated list,
+  cheapest first (default: `gemini-2.5-flash-lite,gemini-2.5-flash`). Keep retired
+  names out — every dead name costs a wasted round-trip per grade.
+- **Where do I change the key later?** Same place: Render → the-forge → Environment →
   edit `GEMINI_API_KEY` → Save. Or your local `.env`.

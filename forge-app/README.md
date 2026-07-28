@@ -37,33 +37,110 @@ Open **http://localhost:3000** → pick a crew member → start a Quest.
 > `.env` for real AI grading + feedback.
 
 By default progress saves to a local file (fine for one machine). To make it **shared
-across the crew from any device**, wire up Supabase 👇
+across the crew from any device**, wire up Turso 👇
 
 ---
 
-## 🌐 Turn on shared progress (Supabase — free)
+## 🌐 Turn on shared progress (Turso — free)
 
-Supabase gives you a free hosted database. The server talks to it with the secret
-**service-role key**, so the browser never touches your database directly.
+Turso gives you a free hosted SQLite database (5 GB, no card). The server talks to it
+over plain HTTP with a secret token, so the browser never touches your database.
 
-1. Make a free project at **[supabase.com](https://supabase.com)** (no card).
-2. **SQL Editor → New query** → paste the contents of **`supabase-schema.sql`** → **Run**.
-   (Creates the `forge_progress` table + the 4 crew rows.)
-3. **Project Settings → API** → copy your **Project URL** and the **`service_role`** key
-   (⚠️ the secret one, *not* `anon`).
-4. Put them in `.env`:
+1. Install the CLI and sign up: **[docs.turso.tech](https://docs.turso.tech)**.
+2. Create the database and a token:
    ```
-   SUPABASE_URL=https://YOUR-PROJECT.supabase.co
-   SUPABASE_SERVICE_KEY=your-service-role-key
+   turso db create the-forge
+   turso db show the-forge --url      # -> TURSO_DATABASE_URL
+   turso db tokens create the-forge   # -> TURSO_AUTH_TOKEN
    ```
-5. Restart: `node server.js`. It prints `Storage: Supabase (shared, cross-device)`.
+3. Put both in `.env`:
+   ```
+   TURSO_DATABASE_URL=libsql://the-forge-YOURNAME.turso.io
+   TURSO_AUTH_TOKEN=your-token
+   ```
+4. Restart: `node server.js`. It prints `Storage: Turso (shared, cross-device)`.
+
+There's no schema step — the server runs `create table if not exists` on boot. (The
+SQL is in **`turso-schema.sql`** if you'd rather see it or run it by hand.)
 
 Now everyone's XP lives in one place. Deploy the server to a free host (Render /
 Railway / Glitch) and the whole crew can use it from their phones on the same link.
 
-> 🔐 **Why the service-role key is safe here:** it stays on the *server*, in `.env`
-> (gitignored). The table has Row Level Security on with no public policies, so the
-> database can't be read with the public key — only through your server.
+> 🔐 **Why the token is safe here:** it stays on the *server*, in `.env` (gitignored).
+> The browser only ever talks to your own server, never to the database.
+
+### Already on Supabase?
+
+It still works — leave `TURSO_*` blank and the Supabase settings take over. You'll
+want to run the updated **`supabase-schema.sql`** first, which adds the `forge_sprites`
+table (see *Storage* below for why). Turso is the better fit now mainly because of
+the free-tier headroom: 5 GB vs 500 MB, and Supabase pauses free projects after 7
+days of inactivity, which a play-in-bursts game trips over regularly.
+
+---
+
+## 🧮 AI grading: making a free key last
+
+Free Gemini quota is counted **per Google Cloud project, not per key** — so a crew
+sharing one key shares one daily allowance. The default model is
+`gemini-2.5-flash-lite` because it has by far the biggest free daily allowance
+(~1,000 requests/day vs ~250 for Flash) and grades short rubric answers fine.
+
+The app avoids the ways this budget normally leaks:
+
+- **Identical re-submissions cost nothing.** Re-submitting the same words replays the
+  saved grade instead of calling the API. Kids re-read and re-submit constantly; this
+  is the single biggest saving.
+- **A short cooldown between graded attempts** (`FORGE_GRADE_COOLDOWN_MS`, default
+  8s) stops a frustrated re-submit spree from draining a day's quota in a minute.
+- **A key test costs exactly one request** against one model, with a 1-token cap. It
+  used to walk the whole fallback chain and spend four.
+- **Retired models are dropped, then remembered.** A model the API rejects is skipped
+  for the rest of the process instead of costing a wasted round-trip on every grade.
+- **Grading output is capped** at 400 tokens — enough for the judge's small JSON,
+  not enough for one bad generation to eat the shared per-minute token budget.
+
+> ⚠️ **Keep retired models out of `FORGE_MODELS`.** Google retires models on a
+> schedule (`gemini-2.0-flash` and `-flash-lite` shut down 2026-06-01;
+> `gemini-2.5-flash` retires 2026-10-16). A dead name in the chain isn't harmless —
+> it costs a wasted round-trip on *every* grade before reaching a model that answers.
+
+`GET /api/admin/health?code=...` reports `apiUsage`, including `cachedGrades` and
+`cooldownBlocked` (calls saved) and `serverKey` vs `ownKey` — if `serverKey` keeps
+climbing, the crew are sharing your quota instead of using their own. Full setup and
+troubleshooting: **`GEMINI_SETUP.md`**.
+
+---
+
+## 💾 Storage: why sprite art lives outside the database
+
+Generated mob art used to be stored as a base64 `data:` URL *inside* the mob-config
+row. That's the quickest thing that works, and it scales badly in three ways at once:
+
+- Every mob save rewrote the whole config, so the database stored a fresh copy of
+  **all** the art each time.
+- Every page load re-downloaded the whole blob, because the browser can't cache art
+  that arrives inside a JSON response.
+- base64 costs ~33% more bytes than the raw PNG.
+
+Thirty sprites at the 320 KB cap is a ~10 MB blob moving on every single page load —
+enough to burn a 5 GB monthly egress allowance in a few hundred visits.
+
+So now each sprite is written **once** to its own record, keyed by a hash of its
+contents, and served as a real PNG from `/api/sprites/<hash>.png` with a one-year
+`immutable` cache header. The config row holds only a short `spriteId`. That means:
+
+- the browser downloads each sprite once, ever;
+- re-saving a mob never re-uploads its art;
+- two mobs sharing the same art cost one copy;
+- deleting a mob garbage-collects art nothing points at any more.
+
+**Migration is automatic.** The first time the server reads an old config it moves any
+inline art into sprite records, rewrites the config once, and logs
+`🖼 Migrated N inline sprite(s)`. Nothing to run by hand.
+
+`GET /api/admin/health?code=...` reports `configBytes` and `sprites` so you can see
+the config stays small.
 
 ---
 
@@ -79,8 +156,8 @@ Browser (public/)  ──►  Node server (server.js)  ──►  Gemini API (AI
 - **`data/quests.js`** — the campaign: Acts → Quests → Steps. Each step has a `prompt`
   (shown) and a hidden `rubric` (used to grade). **Edit this to change content.**
 - **`server.js`** — serves the app, keeps the API key server-side, grades responses,
-  and saves everyone's progress to the shared store (Supabase if configured, else a
-  local file).
+  and saves everyone's progress to the shared store (Turso if configured, else
+  Supabase, else a local file).
 - **`public/`** — the frontend (`index.html`, `styles.css`, `app.js`).
 
 ### Why a server (not just a web page)?
@@ -107,13 +184,13 @@ The app is a Node server, so it needs a Node host (not plain static hosting).
 2. Go to **[render.com](https://render.com)** → New → **Blueprint** → connect the repo
    (or use the one-click link in `render.yaml`). It finds `render.yaml` automatically.
 3. In the new service's **Environment**, paste your secrets:
-   `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
+   `GEMINI_API_KEY`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`.
 4. Deploy → you get a public URL like `https://the-forge.onrender.com`. Share it.
 
-> ⚠️ **Use Supabase when deployed.** Render's free filesystem is wiped on restart, so
-> the local-file store won't persist there — the Supabase store will. (Also, free
-> Render services sleep after inactivity and take ~30s to wake on the first hit.)
-> Railway / Glitch / Fly work too; any Node host is fine.
+> ⚠️ **Use a hosted database when deployed.** Render's free filesystem is wiped on
+> restart, so the local-file store won't persist there — Turso (or Supabase) will.
+> (Also, free Render services sleep after inactivity and take ~30s to wake on the
+> first hit.) Railway / Glitch / Fly work too; any Node host is fine.
 
 ## 🔜 Easy next steps
 - Boss challenges (+50 XP), achievement badges, streaks, daily quests.
