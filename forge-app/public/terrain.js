@@ -120,8 +120,8 @@
       // Bases: raised platforms at each end, reachable by a centre ramp.
       plateaus.push({ shape: 'rect', x: WW / 2, y: WH * 0.938, hw: WW * 0.30, hh: WH * 0.062, z: 1 });
       plateaus.push({ shape: 'rect', x: WW / 2, y: WH * 0.062, hw: WW * 0.30, hh: WH * 0.062, z: 1 });
-      ramps.push({ shape: 'rect', x: WW / 2, y: WH * 0.855, hw: 62, hh: WH * 0.045, axis: 'y', from: 0, to: 1, dir: 1 });
-      ramps.push({ shape: 'rect', x: WW / 2, y: WH * 0.145, hw: 62, hh: WH * 0.045, axis: 'y', from: 0, to: 1, dir: -1 });
+      ramps.push({ shape: 'rect', x: WW / 2, y: WH * 0.855, hw: 78, hh: WH * 0.05, axis: 'y', from: 0, to: 1, dir: 1 });
+      ramps.push({ shape: 'rect', x: WW / 2, y: WH * 0.145, hw: 78, hh: WH * 0.05, axis: 'y', from: 0, to: 1, dir: -1 });
       // Bush in the jungle: stand in it and the horde loses track of you.
       const bushSpots = [[0.335, 0.34], [0.665, 0.34], [0.335, 0.66], [0.665, 0.66], [0.17, 0.5], [0.83, 0.5], [0.5, 0.26], [0.5, 0.74]];
       for (let i = 0; i < Math.min(p.bush, bushSpots.length); i++)
@@ -155,37 +155,58 @@
     }
 
     // ---- queries -----------------------------------------------------------
-    function heightAt(x, y) {
-      for (const r of ramps) if (inRect(r, x, y)) {          // ramps interpolate, so they're walkable
-        const t = clamp((y - (r.y - r.hh)) / (r.hh * 2), 0, 1);
-        return r.dir > 0 ? r.from + (r.to - r.from) * t : r.to + (r.from - r.to) * t;
-      }
+    // Ground height at a point. Ramps interpolate along their length so they're
+    // walkable, and they get SLOPED SHOULDERS along their sides: without them a
+    // ramp's flank is a sheer drop, and since a wall parallel to the view axis
+    // projects to zero width, it would be an invisible barrier you walk into
+    // while trying to step onto the ramp.
+    const SHOULDER = 30;
+    function groundAt(x, y) {                                // everything except ramps
       for (const q of plateaus) if (inZone(q, x, y)) return q.z;
       return 0;
+    }
+    function heightAt(x, y) {
+      for (const r of ramps) {
+        const dx = Math.abs(x - r.x);
+        if (dx >= r.hw + SHOULDER || y <= r.y - r.hh || y >= r.y + r.hh) continue;
+        const t = clamp((y - (r.y - r.hh)) / (r.hh * 2), 0, 1);
+        const h = r.dir > 0 ? r.from + (r.to - r.from) * t : r.to + (r.from - r.to) * t;
+        if (dx <= r.hw) return h;                            // on the ramp proper
+        const k = (dx - r.hw) / SHOULDER;                    // 0 at the ramp edge, 1 where it meets the ground beside it
+        return h + (groundAt(x, y) - h) * k;
+      }
+      return groundAt(x, y);
     }
     const waterAt = (x, y) => water.some(w => inZone(w, x, y));
     const bushAt = (x, y) => bush.some(b => inZone(b, x, y));
     const slowAt = (x, y) => waterAt(x, y) ? p.waterSlow : 1;
     const blockedAt = (x, y, r) => obstacles.find(o => overlaps(o, x, y, r || 0)) || null;
 
-    // A cliff is a height jump you can't climb — that's what makes the ramp the
-    // only way onto the high ground, without needing any extra geometry.
+    // A cliff is a height jump you can't CLIMB. Dropping off one is always
+    // allowed — you just take the fall. Blocking both directions is what made
+    // high ground feel like a pen: walk to the edge and you're simply stuck.
     const CLIFF = 0.34;
     function standable(x, y, r, fromZ) {
       if (x < bounds.minX || x > bounds.maxX || y < bounds.minY || y > bounds.maxY) return false;
       if (blockedAt(x, y, r)) return false;
-      if (fromZ != null && Math.abs(heightAt(x, y) - fromZ) > CLIFF) return false;
+      if (fromZ != null && heightAt(x, y) - fromZ > CLIFF) return false;        // up needs a ramp; down is free
       return true;
     }
     // Move an entity toward (nx,ny), sliding along whatever it runs into.
+    // Returns how far it FELL this step, so the caller can sell the landing.
     function move(ent, nx, ny, r) {
-      const z = ent.z || 0;
+      const z = ent.z || 0, ox = ent.x, oy = ent.y;
       if (standable(nx, ny, r, z)) { ent.x = nx; ent.y = ny; }
       else if (standable(nx, ent.y, r, z)) ent.x = nx;
       else if (standable(ent.x, ny, r, z)) ent.y = ny;
       ent.x = clamp(ent.x, bounds.minX, bounds.maxX); ent.y = clamp(ent.y, bounds.minY, bounds.maxY);
-      const o = blockedAt(ent.x, ent.y, r); if (o) pushOut(o, ent, r);          // spawned/shoved inside something
+      const o = blockedAt(ent.x, ent.y, r);
+      if (o) {                                                                  // spawned/shoved inside something
+        pushOut(o, ent, r);
+        if (heightAt(ent.x, ent.y) - z > CLIFF) { ent.x = ox; ent.y = oy; }     // a shove must never boost you up a cliff
+      }
       ent.z = heightAt(ent.x, ent.y);
+      return Math.max(0, z - ent.z);
     }
     // Line of sight / projectile path. Sampled — segments are short and this is
     // cached by the caller, so the loop stays cheap on a phone.
@@ -201,16 +222,16 @@
     const shotBlocked = (x, y) => obstacles.some(o => o.blocksShot && overlaps(o, x, y, 3));
     // Steering target for a mob that wants to reach (tx,ty). Mobs walk straight at
     // you — with no pathfinding, a cliff would leave them milling at the bottom
-    // forever. So when the target is on a different level, send them via the ramp:
-    // first to its mouth on their side, then through it.
+    // forever. So when the target is somewhere they'd have to CLIMB to, send them
+    // via the ramp: first to its mouth on their side, then through it. Chasing you
+    // downhill needs no detour — they just jump off after you.
     function navTarget(e, tx, ty) {
       if (!ramps.length) return { x: tx, y: ty };
       const ez = heightAt(e.x, e.y), tz = heightAt(tx, ty);
-      if (Math.abs(ez - tz) <= CLIFF) return { x: tx, y: ty };
+      if (tz - ez <= CLIFF) return { x: tx, y: ty };
       let best = null, bd = 1e9;
-      for (const r of ramps) {
-        const lowY = r.dir > 0 ? r.y - r.hh : r.y + r.hh, highY = r.dir > 0 ? r.y + r.hh : r.y - r.hh;
-        const mouthY = ez < tz ? lowY : highY, farY = ez < tz ? highY : lowY;     // enter from my level
+      for (const r of ramps) {                                                   // always entered from the low end
+        const mouthY = r.dir > 0 ? r.y - r.hh : r.y + r.hh, farY = r.dir > 0 ? r.y + r.hh : r.y - r.hh;
         const d = Math.hypot(r.x - e.x, mouthY - e.y);
         if (d < bd) { bd = d; best = { r, mouthY, farY }; }
       }
@@ -262,11 +283,19 @@
         for (let yy = yTop; yy < yBot; yy += 60 * SQ) for (let xx = x; xx < x + w; xx += 60) if (((xx / 60 | 0) + (yy / (60 * SQ) | 0)) % 2) c.fillRect(xx, yy, 60, 60 * SQ);
         c.restore();
       }
-      for (const r of ramps) {                                        // ramp: a wedge you can read at a glance
-        const x = r.x - r.hw, y0 = py(r.y - r.hh, r.dir > 0 ? r.from : r.to), y1 = py(r.y + r.hh, r.dir > 0 ? r.to : r.from);
-        c.fillStyle = '#4aa855'; c.beginPath(); c.moveTo(x, y0); c.lineTo(x + r.hw * 2, y0); c.lineTo(x + r.hw * 2, y1); c.lineTo(x, y1); c.closePath(); c.fill();
-        c.strokeStyle = 'rgba(255,255,255,.18)'; c.lineWidth = 2;
-        for (let i = 1; i < 5; i++) { const t = i / 5, yy = y0 + (y1 - y0) * t; c.beginPath(); c.moveTo(x + 6, yy); c.lineTo(x + r.hw * 2 - 6, yy); c.stroke(); }
+      // Ramp: drawn the full width you can actually walk, shoulders included, so
+      // the slope never looks narrower than it plays.
+      for (const r of ramps) {
+        const hw = r.hw + SHOULDER, x = r.x - hw, w = hw * 2;
+        const y0 = py(r.y - r.hh, r.dir > 0 ? r.from : r.to), y1 = py(r.y + r.hh, r.dir > 0 ? r.to : r.from);
+        const g = c.createLinearGradient(x, 0, x + w, 0);            // shoulders read as sloped dirt
+        g.addColorStop(0, '#3c8c47'); g.addColorStop(SHOULDER / w, '#4aa855');
+        g.addColorStop(1 - SHOULDER / w, '#4aa855'); g.addColorStop(1, '#3c8c47');
+        c.fillStyle = g; c.beginPath(); c.moveTo(x, y0); c.lineTo(x + w, y0); c.lineTo(x + w, y1); c.lineTo(x, y1); c.closePath(); c.fill();
+        c.strokeStyle = 'rgba(255,255,255,.20)'; c.lineWidth = 2;    // tread lines
+        for (let i = 1; i < 6; i++) { const t = i / 6, yy = y0 + (y1 - y0) * t; c.beginPath(); c.moveTo(x + 8, yy); c.lineTo(x + w - 8, yy); c.stroke(); }
+        c.strokeStyle = 'rgba(0,0,0,.22)'; c.lineWidth = 2;          // edges, so you can see where it ends
+        c.beginPath(); c.moveTo(x, y0); c.lineTo(x, y1); c.moveTo(x + w, y0); c.lineTo(x + w, y1); c.stroke();
       }
       for (const w of water) {                                        // water: rim, body, highlight, ripples
         zoneFill(c, w, '#1c6fa8');
