@@ -159,12 +159,36 @@ Browser (public/)  ──►  Node server (server.js)  ──►  Gemini API (AI
   and saves everyone's progress to the shared store (Turso if configured, else
   Supabase, else a local file).
 - **`public/`** — the frontend (`index.html`, `styles.css`, `app.js`).
+- **`public/terrain.js`** — the battlefield itself: each level's obstacles, water,
+  towers and elevation, plus the collision / line-of-sight / height queries the
+  battle engine asks it. Layouts are **generated from a few knobs + a seed**, so the
+  same level always builds the same map and God Mode can retune it without a map editor.
 
 ### Why a server (not just a web page)?
 Your two choices required it: **AI grading** needs the API key kept secret (so it lives
 on the server, never in the browser), and **shared progress** needs one central store.
 
 ---
+
+## 🏔 The battlefield ladder
+
+Battles don't all happen in the same green box — the arena upgrades as the level
+climbs, and the features **stack**:
+
+| Level | Environment | What it changes about the fight |
+|-------|-------------|---------------------------------|
+| 1 | Plain field | the tutorial arena — nothing in your way |
+| 2 | Solid cover | boulders and crates block movement, projectiles **and** line of sight, so shooters have to reposition |
+| 3 | + Water | pools slow heroes and melee mobs to ~45%; shots fly straight over, ranged mobs refuse to wade |
+| 4 | + Shooting towers | enemy turrets lock on, telegraph the shot, and fire. Optional to kill — destroying one always drops gear |
+| 5 | 3D MOBA map | the view tilts and gains real elevation: 3 lanes, a river, jungle bush you vanish inside, and high-ground bases reached by ramps (high ground = longer reach) |
+
+Levels 6–16 run the level-5 map at higher difficulty.
+
+**Tuning it:** God Mode → **🏔 Terrain**. Every level's knobs — obstacle counts, pools,
+tower HP / range / reload, water slow, layout seed, and which layout to use — are
+editable and saved server-side, with a **⚔ test fight** button to feel the change
+immediately. "Reset to built-in" puts a level back the way it shipped.
 
 ## 🎮 What works right now
 
@@ -174,6 +198,7 @@ on the server, never in the browser), and **shared progress** needs one central 
 - **XP + ranks** (Noob → Forgemaster) with a live XP bar
 - **Shared crew leaderboard** (polls every ~12s so crewmates' progress shows up)
 - Resubmit to beat your score; reset button for testing
+- **Battles** with a per-level battlefield (cover → water → towers → a 3D MOBA map)
 
 ## 🚀 Deploy it (free, so the crew plays from their phones)
 
