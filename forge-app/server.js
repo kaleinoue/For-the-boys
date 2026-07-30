@@ -25,12 +25,16 @@ const crypto = require('crypto');
 
 // minimal .env loader (no dependency) — reads KEY=value lines from ./.env
 (function loadEnv() {
-  try {
-    for (const line of fs.readFileSync(path.join(__dirname, '.env'), 'utf8').split('\n')) {
-      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/i);
-      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
-    }
-  } catch { /* no .env — fine */ }
+  let raw;
+  try { raw = fs.readFileSync(path.join(__dirname, '.env'), 'utf8'); } catch { return; }  // no .env — fine
+  // \r\n: Windows editors write CRLF, and splitting on \n alone leaves a trailing
+  // carriage return glued to every value — enough to corrupt a URL or an API key
+  // in ways that only surface as a confusing 4xx much later.
+  // ﻿: Notepad and PowerShell's utf8 both prepend a BOM.
+  for (const line of raw.replace(/^﻿/, '').split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+  }
 })();
 
 const { CREW, RANKS, ACTS } = require('./data/quests');
