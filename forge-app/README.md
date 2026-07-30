@@ -77,6 +77,33 @@ table (see *Storage* below for why). Turso is the better fit now mainly because 
 the free-tier headroom: 5 GB vs 500 MB, and Supabase pauses free projects after 7
 days of inactivity, which a play-in-bursts game trips over regularly.
 
+### Moving your data from Supabase to Turso
+
+Setting the `TURSO_*` vars does **not** bring your data with it — a fresh Turso
+database is empty, so the crew's XP and every mob they built would look wiped. Copy
+it across first with the included one-shot script:
+
+```bash
+cd forge-app
+# put BOTH sets of credentials in .env (SUPABASE_* and TURSO_*), then:
+node migrate-supabase-to-turso.js --dry-run   # show what would move
+node migrate-supabase-to-turso.js             # actually move it
+```
+
+It copies crew progress, the mob/projectile/terrain config and every sprite record,
+then verifies by reading it all back — row counts, total XP, and that every sprite the
+config points at really exists. If your Supabase copy still has art inline (from
+before the sprite split), the script extracts it on the way through, so you land in
+the new shape either way.
+
+It only ever **reads** from Supabase, so your old data stays intact as a rollback.
+Re-running is safe (every write is an upsert), and it refuses to overwrite a Turso
+database that already holds progress unless you pass `--overwrite`.
+
+Then set `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` on your host and redeploy. Leave
+the `SUPABASE_*` vars in place — Turso takes priority, so they cost nothing and give
+you a one-line rollback. Confirm with `/api/admin/health?code=...` → `"storage":"turso"`.
+
 ---
 
 ## 🧮 AI grading: making a free key last
