@@ -8,6 +8,11 @@
 //
 //    node migrate-supabase-to-turso.js --dry-run     # look, change nothing
 //    node migrate-supabase-to-turso.js               # do it
+//    node migrate-supabase-to-turso.js --from-file export.json
+//        # read a hand-made JSON export instead of Supabase's REST API. Needed when
+//        # the project is RESTRICTED (free-tier egress cap): the API you'd use to
+//        # get your data out is the first thing the cap takes away. The dashboard
+//        # SQL editor still works — see the README for the export query.
 //
 //  Needs BOTH sets of credentials at once. It reads .env if there is one, and
 //  ASKS for anything missing — so you can just run it and paste the four values,
@@ -45,9 +50,20 @@ const envKeys = [];
   }
 })();
 
-const args = new Set(process.argv.slice(2));
+const argv = process.argv.slice(2);
+const args = new Set(argv);
 const DRY = args.has('--dry-run');
 const OVERWRITE = args.has('--overwrite');
+// --from-file <path> or --from-file=<path>: read a hand-made JSON export instead of
+// Supabase's REST API. The escape hatch for a project that's been restricted — the
+// API you need to get your data out is the first thing a quota cap takes away.
+const FROM_FILE = (() => {
+  const i = argv.findIndex(a => a === '--from-file' || a.startsWith('--from-file='));
+  if (i === -1) return null;
+  const v = argv[i].includes('=') ? argv[i].slice(argv[i].indexOf('=') + 1) : argv[i + 1];
+  if (!v || v.startsWith('--')) die('--from-file needs a path, e.g. --from-file export.json');
+  return v;
+})();
 
 // Applied to whatever we end up with, from .env or from the keyboard — a hand-pasted
 // value is just as likely to carry a trailing slash or a libsql:// scheme as a stored one.
@@ -124,8 +140,13 @@ function askDone() { if (rl) { rl.close(); rl = null; } }
 // paste go straight into memory where none of that can intercept it.
 async function ensureCredentials() {
   const want = [
-    ['SUPABASE_URL',         'Supabase project URL — https://xxxxx.supabase.co',     () => SB_URL,      (v) => { SB_URL = cleanUrl(v); }],
-    ['SUPABASE_SERVICE_KEY', 'Supabase service_role key — Settings → API',           () => SB_KEY,      (v) => { SB_KEY = v.trim(); }],
+    // Reading from a file means Supabase is never contacted, so demanding its
+    // credentials would block the one path that still works when the project is
+    // restricted — which is the whole point of --from-file.
+    ...(FROM_FILE ? [] : [
+      ['SUPABASE_URL',         'Supabase project URL — https://xxxxx.supabase.co',   () => SB_URL,      (v) => { SB_URL = cleanUrl(v); }],
+      ['SUPABASE_SERVICE_KEY', 'Supabase service_role key — Settings → API',         () => SB_KEY,      (v) => { SB_KEY = v.trim(); }],
+    ]),
     ['TURSO_DATABASE_URL',   'Turso URL — turso db show <name> --url',               () => TURSO_URL,   (v) => { TURSO_URL = cleanTursoUrl(v); }],
     ['TURSO_AUTH_TOKEN',     'Turso token — turso db tokens create <name>',          () => TURSO_TOKEN, (v) => { TURSO_TOKEN = v.trim(); }],
   ];
@@ -167,14 +188,76 @@ async function ensureCredentials() {
   }
 }
 
-// ---- Supabase (read side) ---------------------------------------------------
+// ---- read side --------------------------------------------------------------
 async function sbGet(pathQuery) {
   const res = await fetch(`${SB_URL}/rest/v1/${pathQuery}`, {
     headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
   });
   if (res.status === 404) return null;                      // table doesn't exist
-  if (!res.ok) throw new Error(`Supabase ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  if (!res.ok) {
+    const body = (await res.text()).slice(0, 300);
+    // 402 means the project is restricted — usually the free-tier egress cap. The
+    // REST API is exactly what you need to GET OUT of Supabase, so being locked out
+    // of it is worth naming rather than leaving as a bare status code.
+    if (res.status === 402) {
+      throw new Error(`Supabase 402 — the project is restricted, so the REST API won't serve reads:\n` +
+        `  ${body}\n\n` +
+        `  You can still migrate. Export the two tables from the Supabase dashboard's SQL\n` +
+        `  editor (it keeps working while the API is capped) and re-run with --from-file.\n` +
+        `  See "Migrating from a restricted project" in forge-app/README.md.`);
+    }
+    throw new Error(`Supabase ${res.status}: ${body}`);
+  }
   return res.json();
+}
+
+// Two ways in: the live REST API, or a JSON export produced by hand. Both hand back
+// the same two shapes, so everything downstream is identical either way.
+function restSource() {
+  return {
+    label: SB_URL,
+    progress: () => sbGet(`${SB_TABLE}?select=crew_id,xp,steps&limit=1000`),
+    async sprites(onProgress) {
+      const index = await sbGet(`${SB_SPRITES}?select=id&limit=5000`);
+      if (index === null) return null;
+      // one at a time: a sprite runs to ~320 KB, and this keeps memory and request
+      // sizes predictable while giving real progress output
+      const out = [];
+      for (const { id } of index) {
+        const rows = await sbGet(`${SB_SPRITES}?id=eq.${encodeURIComponent(id)}&select=id,mime,data`);
+        if (rows && rows[0]) out.push(rows[0]);
+        onProgress(out.length, index.length);
+      }
+      return out;
+    },
+  };
+}
+
+// Accepts either { progress: [...], sprites: [...] } or a bare progress array, since
+// a hand-run `select ... for json`-style export can plausibly produce either.
+function fileSource(file) {
+  let raw;
+  try { raw = fs.readFileSync(file, 'utf8'); } catch (e) { die(`Can't read ${file}: ${e.message}`); }
+  let doc;
+  try { doc = JSON.parse(raw.replace(/^﻿/, '')); } catch (e) { die(`${file} isn't valid JSON: ${e.message}`); }
+  if (Array.isArray(doc)) doc = { progress: doc };
+  if (!doc || typeof doc !== 'object') die(`${file} should hold a JSON object or array.`);
+  const progress = doc.progress || doc.forge_progress;
+  if (!Array.isArray(progress)) {
+    die(`${file} has no "progress" array.\n` +
+        `  Expected: { "progress": [ {crew_id, xp, steps}, … ], "sprites": [ {id, mime, data}, … ] }\n` +
+        `  Found keys: ${Object.keys(doc).join(', ') || '(none)'}`);
+  }
+  const sprites = doc.sprites || doc.forge_sprites || null;
+  if (sprites !== null && !Array.isArray(sprites)) die(`${file}: "sprites" should be an array if present.`);
+  for (const r of progress) {
+    if (!r || typeof r.crew_id !== 'string') die(`${file}: every progress row needs a "crew_id" string.`);
+  }
+  return {
+    label: file,
+    progress: async () => progress,
+    sprites: async () => sprites,
+  };
 }
 
 // ---- Turso (write side) -----------------------------------------------------
@@ -240,29 +323,25 @@ function extractInlineSprites(cfg, sprites) {
 (async function main() {
   console.log(`\n🔁 THE FORGE — Supabase ➜ Turso${DRY ? '   (DRY RUN — nothing will be written)' : ''}`);
   await ensureCredentials();
-  console.log(`   from: ${SB_URL}`);
+  const source = FROM_FILE ? fileSource(FROM_FILE) : restSource();
+  console.log(`   from: ${source.label}`);
   console.log(`   to:   ${TURSO_URL}\n`);
 
-  // ---- 1. read Supabase ----
-  const progressRows = await sbGet(`${SB_TABLE}?select=crew_id,xp,steps&limit=1000`);
+  // ---- 1. read the source ----
+  const progressRows = await source.progress();
   if (progressRows === null) die(`Table "${SB_TABLE}" not found in Supabase — nothing to migrate.`);
   const crewRows = progressRows.filter(r => r.crew_id !== '__mobs');
   const mobsRow = progressRows.find(r => r.crew_id === '__mobs');
-  console.log(`📖 Supabase: ${crewRows.length} crew row(s)${mobsRow ? ' + the __mobs config' : ', no __mobs config'}`);
+  console.log(`📖 ${FROM_FILE ? 'Export file' : 'Supabase'}: ${crewRows.length} crew row(s)${mobsRow ? ' + the __mobs config' : ', no __mobs config'}`);
 
   const sprites = new Map();
-  const spriteIndex = await sbGet(`${SB_SPRITES}?select=id&limit=5000`);
-  if (spriteIndex === null) {
-    console.log(`   (no "${SB_SPRITES}" table — that's fine, art may still be inline)`);
+  const spriteRows = await source.sprites((n, total) => process.stdout.write(`\r   reading sprites… ${n}/${total}`));
+  if (spriteRows === null) {
+    console.log(`   (no "${SB_SPRITES}" data — that's fine, art may still be inline)`);
   } else {
-    // fetched one at a time: a sprite is up to ~320 KB and this keeps memory
-    // and request sizes predictable while giving real progress output
-    for (const { id } of spriteIndex) {
-      const rows = await sbGet(`${SB_SPRITES}?id=eq.${encodeURIComponent(id)}&select=id,mime,data`);
-      if (rows && rows[0]) sprites.set(id, rows[0]);
-      process.stdout.write(`\r   reading sprites… ${sprites.size}/${spriteIndex.length}`);
-    }
-    if (spriteIndex.length) process.stdout.write('\n');
+    if (spriteRows.length && !FROM_FILE) process.stdout.write('\n');
+    for (const r of spriteRows) if (r && r.id) sprites.set(r.id, r);
+    if (FROM_FILE) console.log(`   ${sprites.size} sprite(s) in the export`);
   }
 
   // ---- 2. normalise the config ----
