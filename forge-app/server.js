@@ -60,8 +60,23 @@ const GRADE_MODELS = [...new Set((process.env.FORGE_MODELS || `${MODEL},gemini-2
 const deadModels = new Set();
 const liveModels = () => { const live = GRADE_MODELS.filter(m => !deadModels.has(m)); return live.length ? live : GRADE_MODELS; };
 const IMAGE_MODEL = process.env.FORGE_IMAGE_MODEL || 'gemini-2.5-flash-image';  // "Nano Banana"
-// Override only for local testing against a stub. Leave unset in real use.
+// Point this at a gateway (OmniRoute, LiteLLM, OpenRouter…) to route grading through it,
+// or at a stub for local testing. Leave unset to talk to Google directly.
 const GEMINI_BASE = (process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com').replace(/\/$/, '');
+// Which dialect the endpoint above speaks. Google's own API and an OpenAI-compatible
+// gateway disagree on the path, the auth header, the request body AND where the answer
+// sits in the response — so every one of those four is switched on this flag.
+//   google (default) -> POST {base}/v1beta/models/{model}:generateContent?key=...
+//   openai           -> POST {base}/chat/completions  with  Authorization: Bearer ...
+// For 'openai', GEMINI_API_BASE should include the version segment the gateway expects,
+// e.g. https://your-gateway/v1
+const API_STYLE = /^openai$/i.test(process.env.GEMINI_API_STYLE || '') ? 'openai' : 'google';
+// Bring-your-own-key. On by default: each player pastes their own Gemini key and spends
+// their own free tier. Turn it OFF (FORGE_BYOK=0) when grading goes through a shared
+// gateway — a player's personal Google key is not a credential that gateway accepts, so
+// offering the key panel would only hand them a way to break their own grading. With it
+// off the key UI disappears and every grade uses GEMINI_API_KEY.
+const BYOK = !/^(0|false|off|no)$/i.test(String(process.env.FORGE_BYOK ?? '1').trim());
 const PASS_SCORE = 60;
 const MAX_SPRITE_BYTES = 320 * 1024;  // stored sprite strips are downscaled client-side; cap the payload
 
@@ -468,9 +483,12 @@ async function gradeResponse(step, response, userKey) {
   const text = (response || '').trim();
   if (text.length < 3)
     return { passed: false, score: 0, feedback: "Looks empty — give it a real go! Even a rough answer earns feedback.", tip: "Write a few sentences and submit again." };
-  // Prefer the player's own key (BYOK, sent per-request, never stored); fall back to a server key if set.
-  const key = (userKey && userKey.trim()) || GEMINI_KEY;
-  if (!key) return mockGrade(step, text, 'No AI key yet — tap 🔑 and Save & Test.');
+  // Prefer the player's own key (BYOK, sent per-request, never stored); fall back to a server
+  // key if set. With BYOK off the player's key is ignored outright — see BYOK above.
+  const key = (BYOK && userKey && userKey.trim()) || GEMINI_KEY;
+  if (!key) return mockGrade(step, text, BYOK
+    ? 'No AI key yet — tap 🔑 and Save & Test.'
+    : 'The Game Master hasn\'t set the server AI key yet — grading is offline until they do.');
 
   const prompt =
 `You are the XP Judge for THE FORGE, a fun, gamified AI course where teens (around 18) learn AI while building a video game. Grade the student's response to a task against the rubric. Be ENCOURAGING but fair — reward real effort and understanding, not perfection or length. Speak directly to the student ("you").
@@ -509,8 +527,7 @@ Return ONLY JSON:
     if (!res.ok) { lastErr = `${model} HTTP ${res.status}`; continue; }
     try {
       const data = await res.json();
-      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-      const parsed = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, ''));
+      const parsed = JSON.parse(modelText(data).replace(/^```json\s*|\s*```$/g, ''));
       const score = Math.max(0, Math.min(100, Math.round(parsed.score ?? 0)));
       return { passed: score >= PASS_SCORE, score, feedback: parsed.feedback || 'Graded.', tip: parsed.tip || '' };
     } catch (e) { lastErr = 'parse: ' + e.message; continue; }
@@ -519,17 +536,33 @@ Return ONLY JSON:
   console.error('Grading fell back to mock:', lastErr);
   // Daily and per-minute caps need different advice: one clears in a minute, the other at
   // midnight Pacific. Telling a kid to "wait a bit" on a spent daily quota just wastes calls.
-  const note = perDay ? "Your key's DAILY free limit is used up — it resets at midnight Pacific. Your answer is saved."
+  //
+  // Which key is at fault changes the advice completely. With BYOK on, a bad key is the
+  // player's own and they can fix it themselves; with BYOK off it is the Game Master's,
+  // and telling a kid to re-paste a key they never entered just sends them in circles.
+  const note = perDay ? (BYOK
+      ? "Your key's DAILY free limit is used up — it resets at midnight Pacific. Your answer is saved."
+      : "The crew's shared DAILY grading limit is used up — it resets at midnight Pacific. Your answer is saved.")
     : /429|rate limit/i.test(lastErr) ? 'Too many submissions in a minute — wait ~60s and re-submit.'
-    : /HTTP 400|API_KEY_INVALID|invalid/i.test(lastErr) ? "Your AI key didn't work — reopen 🔑 and re-paste it with the copy button."
-    : /404/.test(lastErr) ? 'No usable grading model for this key — the Game Master may need to set FORGE_MODELS.'
-    : 'AI grader unreachable right now — reopen 🔑 to re-test your key.';
+    : /HTTP 400|API_KEY_INVALID|invalid/i.test(lastErr) ? (BYOK
+      ? "Your AI key didn't work — reopen 🔑 and re-paste it with the copy button."
+      : "The server's AI key was rejected — tell the Game Master.")
+    : /404/.test(lastErr) ? 'No usable grading model — the Game Master may need to set FORGE_MODELS.'
+    : BYOK ? 'AI grader unreachable right now — reopen 🔑 to re-test your key.'
+    : 'AI grader unreachable right now — your answer is saved, try again shortly.';
   return mockGrade(step, text, note);
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 // Nano Banana image generation. Returns a data URL, or throws with a readable message.
+// Note this one is deliberately NOT routed through modelRequest(). Image generation has no
+// equivalent in the OpenAI chat-completions shape, so on a gateway configured that way we say
+// so plainly rather than sending a request that comes back as an opaque 400.
 async function generateImage(prompt, key) {
+  if (API_STYLE === 'openai') {
+    const e = new Error('Sprite generation needs a Google-shaped endpoint; this server is set to GEMINI_API_STYLE=openai. Use Import to add art instead.');
+    e.status = 501; throw e;
+  }
   apiUsage.image++;
   const url = `${GEMINI_BASE}/v1beta/models/${IMAGE_MODEL}:generateContent?key=${key}`;
   const res = await fetch(url, {
@@ -548,20 +581,47 @@ async function generateImage(prompt, key) {
 // share one key they share one allowance — this is how the Game Master sees that happening.
 const apiUsage = { grade: 0, image: 0, keyTest: 0, cachedGrades: 0, cooldownBlocked: 0, serverKey: 0, ownKey: 0 };
 
-async function callGemini(model, prompt, key) {
-  apiUsage.grade++;
-  if (key && key !== GEMINI_KEY) apiUsage.ownKey++; else apiUsage.serverKey++;
-  const url = `${GEMINI_BASE}/v1beta/models/${model}:generateContent?key=${key || GEMINI_KEY}`;
-  return fetch(url, {
+// Build one completion request in whichever dialect GEMINI_API_BASE speaks.
+// Returns [url, init] so callers can spread it straight into fetch().
+//
+// maxTokens caps a runaway answer. The judge returns a small fixed JSON object, so the
+// default never truncates a real grade — it just stops one bad generation eating the
+// per-minute token budget every grade draws from.
+function modelRequest(model, prompt, key, { maxTokens = 400, json = true } = {}) {
+  if (API_STYLE === 'openai') {
+    return [`${GEMINI_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.4,
+        max_tokens: maxTokens,
+        ...(json ? { response_format: { type: 'json_object' } } : {}),
+      }),
+    }];
+  }
+  return [`${GEMINI_BASE}/v1beta/models/${model}:generateContent?key=${key}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      // maxOutputTokens caps a runaway answer. The judge returns a small fixed JSON object, so
-      // this never truncates a real grade — it just stops one bad generation eating the shared
-      // per-minute token budget that every crew member's key draws from.
-      generationConfig: { responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 400 },
+      generationConfig: {
+        ...(json ? { responseMimeType: 'application/json' } : {}),
+        temperature: 0.4, maxOutputTokens: maxTokens,
+      },
     }),
-  });
+  }];
+}
+
+// Pull the generated text out of a parsed response body, either dialect.
+const modelText = (data) => (API_STYLE === 'openai'
+  ? data?.choices?.[0]?.message?.content
+  : data?.candidates?.[0]?.content?.parts?.[0]?.text) || '{}';
+
+async function callGemini(model, prompt, key) {
+  apiUsage.grade++;
+  if (key && key !== GEMINI_KEY) apiUsage.ownKey++; else apiUsage.serverKey++;
+  return fetch(...modelRequest(model, prompt, key || GEMINI_KEY));
 }
 
 // Tell a per-MINUTE rate limit (resets in seconds) from a per-DAY quota (resets midnight PT).
@@ -578,18 +638,16 @@ function classify429(body) {
 // key" tap could spend four requests — on a 250/day allowance that is real money. A key that
 // works on one free model works on the others, so one probe answers the question.
 async function geminiPing(key) {
-  const k = (key && key.trim()) || GEMINI_KEY;
-  if (!k) return { keyPresent: false, ok: false, note: 'No API key set. Add your own in the app (🔑) or set GEMINI_API_KEY on the server.' };
+  const k = (BYOK && key && key.trim()) || GEMINI_KEY;
+  if (!k) return { keyPresent: false, ok: false, note: BYOK
+    ? 'No API key set. Add your own in the app (🔑) or set GEMINI_API_KEY on the server.'
+    : 'No API key set. Grading runs on the server key — set GEMINI_API_KEY.' };
   const models = liveModels();
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
     try {
-      const url = `${GEMINI_BASE}/v1beta/models/${model}:generateContent?key=${k}`;
       apiUsage.keyTest++;
-      const res = await fetch(url, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }], generationConfig: { maxOutputTokens: 1 } }),
-      });
+      const res = await fetch(...modelRequest(model, 'hi', k, { maxTokens: 1, json: false }));
       if (res.ok) return { keyPresent: true, ok: true, model };
       const body = (await res.text()).slice(0, 600);
       const info = { keyPresent: true, ok: false, status: res.status, model, ...(res.status === 429 ? classify429(body) : { error: body.slice(0, 300) }) };
@@ -643,6 +701,10 @@ function serveStatic(req, res) {
 const server = http.createServer(async (req, res) => {
   const url = req.url.split('?')[0];
   try {
+    // What the client needs to know before it draws anything. `byok` decides whether the
+    // 🔑 panel exists at all — see BYOK. No secrets here, only whether a key is configured.
+    if (req.method === 'GET' && url === '/api/config')
+      return sendJson(res, 200, { byok: BYOK, hasServerKey: !!GEMINI_KEY });
     if (req.method === 'GET' && url === '/api/quests') return sendJson(res, 200, publicQuests());
     if (req.method === 'GET' && url === '/api/state') return sendJson(res, 200, decorate(await loadState()));
 
@@ -671,8 +733,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url === '/api/admin/mobs/generate') { // Nano Banana sprite generation (uses caller's key)
       const { code, key, prompt } = await readBody(req);
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
-      const k = (key && String(key).trim()) || GEMINI_KEY;
-      if (!k) return sendJson(res, 400, { error: 'No image key. Paste your Gemini key in the 🔑 panel first.' });
+      const k = (BYOK && key && String(key).trim()) || GEMINI_KEY;
+      if (!k) return sendJson(res, 400, { error: BYOK
+        ? 'No image key. Paste your Gemini key in the 🔑 panel first.'
+        : 'No image key. Set GEMINI_API_KEY on the server, or use Import.' });
       if (!prompt || !String(prompt).trim()) return sendJson(res, 400, { error: 'Empty prompt.' });
       try {
         const image = await generateImage(String(prompt).slice(0, 2000), k);
@@ -899,6 +963,7 @@ const server = http.createServer(async (req, res) => {
       const cfg = await loadMobs();
       return sendJson(res, 200, {
         storage: STORAGE_NAME, model: MODEL, models: liveModels(), retiredModels: [...deadModels],
+        apiStyle: API_STYLE, apiBase: GEMINI_BASE, byok: BYOK,
         gemini: await geminiPing(),
         sprites: referencedSprites(cfg).size, configBytes: JSON.stringify(cfg).length,
         // Since boot. `serverKey` counting up means the crew are sharing YOUR key — and so

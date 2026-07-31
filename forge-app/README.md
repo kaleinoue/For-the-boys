@@ -137,6 +137,45 @@ The app avoids the ways this budget normally leaks:
 climbing, the crew are sharing your quota instead of using their own. Full setup and
 troubleshooting: **`GEMINI_SETUP.md`**.
 
+### Routing grading through a gateway instead
+
+If you already run an LLM gateway (OmniRoute, LiteLLM, OpenRouter…), you can point the
+whole crew at it and skip per-player keys entirely. Three variables:
+
+```
+GEMINI_API_BASE=https://your-gateway/v1
+GEMINI_API_STYLE=openai      # or "google" — see below
+FORGE_BYOK=0
+GEMINI_API_KEY=your-gateway-key
+FORGE_MODELS=...             # whatever names YOUR gateway accepts
+```
+
+`GEMINI_API_STYLE` picks the dialect, because the two disagree about more than the URL:
+
+| | `google` (default) | `openai` |
+|---|---|---|
+| path | `{base}/v1beta/models/{model}:generateContent` | `{base}/chat/completions` |
+| auth | `?key=` query param | `Authorization: Bearer` |
+| body | `contents[].parts[]` | `messages[]` |
+| answer | `candidates[0].content.parts[0].text` | `choices[0].message.content` |
+
+Most routers speak `openai`. Check yours before setting it — a mismatch shows up as
+every grade falling back to the offline grader.
+
+**`FORGE_BYOK=0` is not optional here.** A gateway won't accept a player's personal
+Google key, so leaving the 🔑 panel visible only gives them a way to break their own
+grading. With BYOK off the panel is hidden, the client stops sending player keys, and
+`GEMINI_API_KEY` grades everyone. The tradeoff is that you're now paying for it — four
+players on one allowance rather than four allowances. Everything in the section above
+(grade caching, cooldown, token caps) is what keeps that affordable.
+
+One feature doesn't survive the trip: **admin sprite generation is Google-shaped only**.
+Under `GEMINI_API_STYLE=openai` the generate button returns a plain message saying so,
+and Import still works for adding art. `FORGE_MODEL` also stops matching what you set,
+so set `FORGE_MODELS` to the gateway's own model names — they're usually prefixed
+(`gemini/gemini-2.5-flash-lite`). `/api/admin/health` echoes back `apiStyle`, `apiBase`
+and `byok` so you can confirm what the server actually thinks it's doing.
+
 ---
 
 ## 💾 Storage: why sprite art lives outside the database

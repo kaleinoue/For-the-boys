@@ -7,6 +7,12 @@ runs but uses a basic "offline" grader instead of real AI feedback.
 The server key is a **fallback for the whole app**. For a crew of four, you want
 **one key per kid** — read the next section for why that matters a lot.
 
+> **Running grading through a gateway instead?** (OmniRoute, LiteLLM, OpenRouter…)
+> Then this whole document is the wrong path. Set `GEMINI_API_BASE`,
+> `GEMINI_API_STYLE` and `FORGE_BYOK=0` per the README's *"Routing grading through a
+> gateway"* section, and nobody needs a personal key — the 🔑 panel disappears and
+> your gateway key grades everyone.
+
 ---
 
 ## ⚡ Read this first: why a free key "runs out instantly"
