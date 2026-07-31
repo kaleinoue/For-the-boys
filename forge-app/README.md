@@ -117,11 +117,26 @@ In **SQL Editor → New query**, run this and download/copy the single JSON cell
 ```sql
 select json_build_object(
   'progress', (select coalesce(json_agg(row_to_json(p)), '[]'::json)
+                 from (select crew_id, xp, steps from forge_progress) p)
+);
+```
+
+If your project also has a **`forge_sprites`** table — it won't if it predates the
+sprite split, in which case the art is still inline in the `__mobs` config and the
+script extracts it for you — add the second half:
+
+```sql
+select json_build_object(
+  'progress', (select coalesce(json_agg(row_to_json(p)), '[]'::json)
                  from (select crew_id, xp, steps from forge_progress) p),
   'sprites',  (select coalesce(json_agg(row_to_json(s)), '[]'::json)
                  from (select id, mime, data from forge_sprites) s)
 );
 ```
+
+Run the first form if you're unsure. The second fails with `42P01: relation
+"forge_sprites" does not exist` when the table isn't there — Postgres resolves table
+names when it parses the query, so no `coalesce` or `case` guard can rescue it.
 
 Save it as `export.json` next to `server.js`, then:
 
