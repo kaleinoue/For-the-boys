@@ -9,9 +9,12 @@
 //    node migrate-supabase-to-turso.js --dry-run     # look, change nothing
 //    node migrate-supabase-to-turso.js               # do it
 //
-//  Needs BOTH sets of credentials present at once — put the TURSO_* values in
-//  .env next to the SUPABASE_* ones and run it locally. Reads Supabase, writes
-//  Turso; never writes to Supabase, so the old data stays put as a rollback.
+//  Needs BOTH sets of credentials at once. It reads .env if there is one, and
+//  ASKS for anything missing — so you can just run it and paste the four values,
+//  with no .env at all. It offers to save them at the end.
+//
+//  Reads Supabase, writes Turso; never writes to Supabase, so the old data stays
+//  put as a rollback.
 //
 //  Safe to re-run: every write is an upsert keyed on crew_id / sprite id.
 // =============================================================================
@@ -19,6 +22,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const readline = require('readline');
 
 // same minimal .env loader the server uses. `envFile` / `envKeys` are kept so a
 // missing-credentials error can say WHICH thing went wrong — no file at all,
@@ -45,20 +49,25 @@ const args = new Set(process.argv.slice(2));
 const DRY = args.has('--dry-run');
 const OVERWRITE = args.has('--overwrite');
 
-const SB_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
-const SB_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || '';
+// Applied to whatever we end up with, from .env or from the keyboard — a hand-pasted
+// value is just as likely to carry a trailing slash or a libsql:// scheme as a stored one.
+const cleanUrl = (v) => (v || '').trim().replace(/\/$/, '');
+const cleanTursoUrl = (v) => cleanUrl(v).replace(/^libsql:\/\//, 'https://');
+
+let SB_URL = cleanUrl(process.env.SUPABASE_URL);
+let SB_KEY = (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || '').trim();
 const SB_TABLE = process.env.SUPABASE_TABLE || 'forge_progress';
 const SB_SPRITES = process.env.SUPABASE_SPRITE_TABLE || 'forge_sprites';
-const TURSO_URL = (process.env.TURSO_DATABASE_URL || '').trim().replace(/\/$/, '').replace(/^libsql:\/\//, 'https://');
-const TURSO_TOKEN = (process.env.TURSO_AUTH_TOKEN || '').trim();
+let TURSO_URL = cleanTursoUrl(process.env.TURSO_DATABASE_URL);
+let TURSO_TOKEN = (process.env.TURSO_AUTH_TOKEN || '').trim();
 
 const die = (msg) => { console.error(`\n✖ ${msg}\n`); process.exit(1); };
 
 // "Missing X" on its own sends people hunting through a file that was never read.
-// Say which of the two situations it is, and list the key names actually parsed
-// (names only — the values are secrets).
-function dieMissing(what, names) {
-  const out = [`Missing ${names.join(' / ')} — ${what}.`, ''];
+// Say which situation it is, and list the key names actually parsed (names only —
+// the values are secrets). Only reachable with no TTY: a human gets asked instead.
+function dieMissing(names) {
+  const out = [`Missing ${names.join(' / ')}, and there's no terminal to ask on.`, ''];
   if (!envFile) {
     out.push(`  No .env found at: ${ENV_PATH}`,
              '  That exact path is the only one read. A .env in the repo root, or one that',
@@ -70,10 +79,93 @@ function dieMissing(what, names) {
              '  The file loaded, but those key names are not in it. Check the spelling, and',
              '  that every line reads  KEY=value  with nothing before the key.');
   }
+  out.push('', '  Or pass them inline:  SUPABASE_URL=… SUPABASE_SERVICE_KEY=… node migrate-supabase-to-turso.js');
   die(out.join('\n'));
 }
-if (!SB_URL || !SB_KEY) dieMissing('this script reads from Supabase', ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY']);
-if (!TURSO_URL || !TURSO_TOKEN) dieMissing('this script writes to Turso', ['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN']);
+
+// ---- asking for whatever .env didn't supply ---------------------------------
+// ONE readline interface for the whole run. Opening a fresh one per question can
+// swallow input that has already been buffered — a multi-line paste, or answers
+// piped in — because those bytes arrive before the next interface exists. Typed
+// values echo normally: masking them means raw mode, and a mis-masked prompt on
+// some Windows terminal would be a worse failure than a token sitting in the
+// scrollback of a local one-shot script.
+let rl = null;
+let queued = [];        // lines that arrived before anything asked for them
+let waiting = null;     // resolver for an ask() that outran the input
+let ended = false;      // stdin closed — asking again would hang forever
+
+function rlInit() {
+  if (rl) return;
+  rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  // rl.question() only listens for ONE line, and readline emits every line in a
+  // chunk the moment it arrives — so pasting all four values at once would fire
+  // the first callback and drop the other three on the floor, leaving question 2
+  // waiting for input that has already been consumed. Keep them instead.
+  rl.on('line', (line) => {
+    if (waiting) { const w = waiting; waiting = null; w(line.trim()); }
+    else queued.push(line.trim());
+  });
+  rl.on('close', () => { ended = true; if (waiting) { const w = waiting; waiting = null; w(''); } });
+}
+function ask(question) {
+  rlInit();
+  process.stdout.write(question);
+  if (queued.length) return Promise.resolve(queued.shift());
+  if (ended) return Promise.resolve('');
+  return new Promise((resolve) => { waiting = resolve; });
+}
+function askDone() { if (rl) { rl.close(); rl = null; } }
+
+// Every failed run of this script so far has been a credential that never reached
+// process.env: a file that was really .env.example, one Notepad saved as .env.txt,
+// a BOM, CRLF. Printing better instructions for editing a file only helps if the
+// file is the thing you can get right — so ask for the value instead, and let the
+// paste go straight into memory where none of that can intercept it.
+async function ensureCredentials() {
+  const want = [
+    ['SUPABASE_URL',         'Supabase project URL — https://xxxxx.supabase.co',     () => SB_URL,      (v) => { SB_URL = cleanUrl(v); }],
+    ['SUPABASE_SERVICE_KEY', 'Supabase service_role key — Settings → API',           () => SB_KEY,      (v) => { SB_KEY = v.trim(); }],
+    ['TURSO_DATABASE_URL',   'Turso URL — turso db show <name> --url',               () => TURSO_URL,   (v) => { TURSO_URL = cleanTursoUrl(v); }],
+    ['TURSO_AUTH_TOKEN',     'Turso token — turso db tokens create <name>',          () => TURSO_TOKEN, (v) => { TURSO_TOKEN = v.trim(); }],
+  ];
+  const missing = want.filter(([, , get]) => !get());
+  if (!missing.length) return;
+  if (!process.stdin.isTTY) dieMissing(missing.map(([name]) => name));
+
+  console.log(`\n🔑 ${missing.length} value(s) missing${envFile ? ` — .env was read, but doesn't contain them` : ' — no .env found'}.`);
+  console.log('   Paste them below; they show on screen as you go. Ctrl-C aborts.\n');
+
+  const typed = new Map();
+  for (const [name, help, , set] of missing) {
+    let v = '';
+    while (!v) {
+      v = await ask(`   ${name}\n     ${help}\n   > `);
+      // Without the `ended` check an exhausted stdin returns '' forever and this
+      // spins instead of stopping.
+      if (!v && ended) die(`Input ended before ${name} was given — nothing was changed.`);
+      if (!v) console.log('     (that was empty — paste the value, or Ctrl-C to stop)');
+    }
+    typed.set(name, v); set(v);
+  }
+
+  const yes = /^y(es)?$/i.test(await ask('\n   Save these to .env so the next run needs no typing? [y/N] > '));
+  askDone();
+  if (!yes) return console.log('   Not saved — they live only in this run.\n');
+  try {
+    let existing = '';
+    try { existing = fs.readFileSync(ENV_PATH, 'utf8'); } catch { /* creating it */ }
+    if (existing && !existing.endsWith('\n')) existing += '\n';
+    // The raw typed text, not the normalised form — .env should read back the way
+    // Supabase and Turso hand these out. Both this script and the server tolerate
+    // a trailing slash and libsql://, so nothing depends on the tidying.
+    const block = [...typed].map(([k, v]) => `${k}=${v}`).join('\n');
+    fs.writeFileSync(ENV_PATH, `${existing}${block}\n`, { mode: 0o600 });
+    console.log(`   ✔ Wrote ${typed.size} line(s) to ${ENV_PATH} — gitignored, so it won't be committed.\n`);
+  } catch (e) {
+    console.log(`   ⚠ Couldn't write .env (${e.message}) — continuing anyway; this run still has the values.\n`);
+  }
+}
 
 // ---- Supabase (read side) ---------------------------------------------------
 async function sbGet(pathQuery) {
@@ -147,6 +239,7 @@ function extractInlineSprites(cfg, sprites) {
 // -----------------------------------------------------------------------------
 (async function main() {
   console.log(`\n🔁 THE FORGE — Supabase ➜ Turso${DRY ? '   (DRY RUN — nothing will be written)' : ''}`);
+  await ensureCredentials();
   console.log(`   from: ${SB_URL}`);
   console.log(`   to:   ${TURSO_URL}\n`);
 

@@ -85,10 +85,15 @@ it across first with the included one-shot script:
 
 ```bash
 cd forge-app
-# put BOTH sets of credentials in .env (SUPABASE_* and TURSO_*), then:
 node migrate-supabase-to-turso.js --dry-run   # show what would move
 node migrate-supabase-to-turso.js             # actually move it
 ```
+
+It needs both sets of credentials at once — `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`,
+`TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`. It reads `.env` if one exists and **asks for
+whatever's missing**, so you can run it with no `.env` at all and paste the four values
+when prompted; it offers to save them at the end. That's usually the quicker path on
+Windows, where a `.env` has a habit of turning out to be `.env.txt` or `.env.example`.
 
 It copies crew progress, the mob/projectile/terrain config and every sprite record,
 then verifies by reading it all back — row counts, total XP, and that every sprite the
