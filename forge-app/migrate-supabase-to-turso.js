@@ -20,14 +20,25 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-// same minimal .env loader the server uses
+// same minimal .env loader the server uses. `envFile` / `envKeys` are kept so a
+// missing-credentials error can say WHICH thing went wrong — no file at all,
+// versus a file whose keys aren't the ones we're looking for.
+const ENV_PATH = path.join(__dirname, '.env');
+let envFile = null;
+const envKeys = [];
 (function loadEnv() {
-  try {
-    for (const line of fs.readFileSync(path.join(__dirname, '.env'), 'utf8').split('\n')) {
-      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/i);
-      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
-    }
-  } catch { /* no .env — fine */ }
+  let raw;
+  try { raw = fs.readFileSync(ENV_PATH, 'utf8'); } catch { return; }   // no .env — fine
+  envFile = ENV_PATH;
+  // \r\n: Windows editors write CRLF, and splitting on \n alone leaves a trailing
+  // carriage return glued to every value — enough to corrupt a URL or a token.
+  // ﻿: Notepad and PowerShell's utf8 both prepend a BOM.
+  for (const line of raw.replace(/^﻿/, '').split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/);
+    if (!m) continue;
+    envKeys.push(m[1]);
+    if (!process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+  }
 })();
 
 const args = new Set(process.argv.slice(2));
@@ -42,8 +53,27 @@ const TURSO_URL = (process.env.TURSO_DATABASE_URL || '').trim().replace(/\/$/, '
 const TURSO_TOKEN = (process.env.TURSO_AUTH_TOKEN || '').trim();
 
 const die = (msg) => { console.error(`\n✖ ${msg}\n`); process.exit(1); };
-if (!SB_URL || !SB_KEY) die('Missing SUPABASE_URL / SUPABASE_SERVICE_KEY — this script reads from Supabase.');
-if (!TURSO_URL || !TURSO_TOKEN) die('Missing TURSO_DATABASE_URL / TURSO_AUTH_TOKEN — this script writes to Turso.');
+
+// "Missing X" on its own sends people hunting through a file that was never read.
+// Say which of the two situations it is, and list the key names actually parsed
+// (names only — the values are secrets).
+function dieMissing(what, names) {
+  const out = [`Missing ${names.join(' / ')} — ${what}.`, ''];
+  if (!envFile) {
+    out.push(`  No .env found at: ${ENV_PATH}`,
+             '  That exact path is the only one read. A .env in the repo root, or one that',
+             "  Notepad silently saved as .env.txt, won't be picked up.");
+  } else {
+    out.push(`  Read .env from:   ${envFile}`,
+             `  Keys found in it: ${envKeys.length ? envKeys.join(', ') : '(none — if you saved from Notepad, re-save as UTF-8, not Unicode)'}`,
+             '',
+             '  The file loaded, but those key names are not in it. Check the spelling, and',
+             '  that every line reads  KEY=value  with nothing before the key.');
+  }
+  die(out.join('\n'));
+}
+if (!SB_URL || !SB_KEY) dieMissing('this script reads from Supabase', ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY']);
+if (!TURSO_URL || !TURSO_TOKEN) dieMissing('this script writes to Turso', ['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN']);
 
 // ---- Supabase (read side) ---------------------------------------------------
 async function sbGet(pathQuery) {
