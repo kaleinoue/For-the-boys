@@ -6,6 +6,10 @@ let GM_CODE = localStorage.getItem('forge_gm_code') || null;   // Game Master pa
 let RUBRICS = null;                                            // cached admin rubrics
 let MOBS = { mobs:{}, levels:{}, terrain:{} };                  // God-Mode mob DB (custom mobs, level spawns, terrain)
 let gmClass = localStorage.getItem('forge_gm_class') || '';    // God Mode: fight as any class style (test override)
+// Server-declared setup. `byok` off means grading runs on a key the Game Master configured,
+// so the whole bring-your-own-key flow is hidden rather than shown-but-useless. Assume BYOK
+// until told otherwise: if this fetch fails, the key panel staying is the harmless outcome.
+let CONFIG = { byok:true, hasServerKey:false };
 const isGod = () => !!GM_CODE;
 const MAX_LEVEL = 16;                                          // quest indices 0..16
 
@@ -34,6 +38,7 @@ const REGION_COLORS = ['#ff6b1a','#ff4d8d','#8b5cf6','#22c1c3','#e5484d','#ffd15
 // ---- boot -------------------------------------------------------------------
 (async function init(){
   makeEmbers();
+  try{ CONFIG = await fetch('/api/config').then(r=>r.json()); }catch{}
   QUESTS = await fetch('/api/quests').then(r=>r.json());
   STATE  = await fetch('/api/state').then(r=>r.json());
   await loadMobs();                                            // merge God-Mode mobs + level assignments into the battle engine
@@ -229,7 +234,7 @@ function importFiles(fileList){
 
 // Optional in-app generation with an API key (free tier or pay-as-you-go). Same green-screen prompt + processing.
 async function generateSprite(){
-  if(!hasGemKey()){ $('#gen-status').innerHTML='<span class="lose">No API key — use Import (make it in Gemini Pro), or add a key in 🔑.</span>'; return; }
+  if(CONFIG.byok && !hasGemKey()){ $('#gen-status').innerHTML='<span class="lose">No API key — use Import (make it in Gemini Pro), or add a key in 🔑.</span>'; return; }
   if(!$('#gen-prompt').value.trim()){ $('#gen-status').textContent='Describe the creature first.'; return; }
   const frames=clampFrames(), prompt=composePrompt(); $('#gen-fullprompt').value=prompt;
   $('#gen-status').innerHTML='<span class="spinner"></span> generating with Nano Banana…';
@@ -457,7 +462,7 @@ function pgImport(fileList){
     .catch(()=>{ $('#pgen-status').innerHTML='<span class="lose">Could not read those image(s).</span>'; });
 }
 async function pgGenerate(){
-  if(!hasGemKey()){ $('#pgen-status').innerHTML='<span class="lose">No API key — use Import, or add a key in 🔑.</span>'; return; }
+  if(CONFIG.byok && !hasGemKey()){ $('#pgen-status').innerHTML='<span class="lose">No API key — use Import, or add a key in 🔑.</span>'; return; }
   if(!$('#pgen-prompt').value.trim()){ $('#pgen-status').textContent='Describe the projectile first.'; return; }
   const frames=pgFrames(), prompt=pgCompose(); $('#pgen-fullprompt').value=prompt;
   $('#pgen-status').innerHTML='<span class="spinner"></span> generating…';
@@ -637,7 +642,13 @@ async function saveAndTestKey(){
   updateKeyNudge();
 }
 function clearKey(){ localStorage.removeItem('forge_gemini_key'); $('#apikey-input').value=''; $('#apikey-status').textContent='Key removed. Answers use the offline grader until you add one.'; updateKeyNudge(); }
-function updateKeyNudge(){ const b=$('#btn-apikey'); if(b) b.textContent = hasGemKey() ? '🔑' : '🔑❗'; }
+// The 🔑 button only means something when players supply their own keys. With BYOK off it
+// would offer them a way to break grading that otherwise just works, so it comes out entirely.
+function updateKeyNudge(){
+  const b=$('#btn-apikey'); if(!b) return;
+  b.classList.toggle('hidden', !CONFIG.byok);
+  b.textContent = hasGemKey() ? '🔑' : '🔑❗';
+}
 
 function wireChrome(){
   $('#btn-gm').onclick = ()=>{ initAudio(); loginGM(); };
@@ -748,7 +759,7 @@ function openQuest(qid){
     : `⚔ <button class="pixel-btn ghost bnote">Fight this quest's battle</button>`;
   note.querySelector('.bnote').onclick = ()=>{ $('#quest-modal').classList.add('hidden'); launchQuestBattle(qid); };
   box.appendChild(note);
-  if(!hasGemKey() && !isGod()){
+  if(CONFIG.byok && !hasGemKey() && !isGod()){
     const kn = document.createElement('div'); kn.className='keynote';
     kn.innerHTML = `🔑 No AI key yet — your answers use a basic offline grader. <button class="pixel-btn ghost knbtn">Add your key for real grading</button>`;
     kn.querySelector('.knbtn').onclick = ()=>{ openApiKey(); };
@@ -805,7 +816,7 @@ function renderStep(step){
     btn.disabled=true; const lbl=btn.textContent; btn.innerHTML='<span class="spinner"></span> judging';
     try{
       const data = await fetch('/api/grade',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({crewId:ME,stepId:step.id,response,userKey:getGemKey()})}).then(r=>r.json());
+        body:JSON.stringify({crewId:ME,stepId:step.id,response,userKey:CONFIG.byok?getGemKey():''})}).then(r=>r.json());
       STATE = data.state;
       slot.innerHTML=''; slot.appendChild(gradeCard(data.result));
       const r=data.result;
@@ -814,7 +825,10 @@ function renderStep(step){
       // Same answer as last time: this is the saved grade replayed, so no API call and no XP re-burst.
       if(r.cached){ btn.textContent = r.passed?'⚒ RE-ATTEMPT':'⚔ ATTEMPT';
         toast('↩ Same answer — showing your saved grade (no AI credits used).'); renderHUD(); renderMap(); return; }
-      if(r.offline){ const bk=$('#btn-apikey'); if(bk) bk.textContent='🔑❗'; toast('⚠ Graded offline — real AI grading didn\'t run. Tap 🔑 to re-test your key.'); }
+      if(r.offline){
+        if(CONFIG.byok){ const bk=$('#btn-apikey'); if(bk) bk.textContent='🔑❗'; toast('⚠ Graded offline — real AI grading didn\'t run. Tap 🔑 to re-test your key.'); }
+        else toast('⚠ Graded offline — the AI grader didn\'t answer. Your XP is saved.');
+      }
       el.querySelector('.st-state').innerHTML = r.passed?`<span class="ok">✓ cleared · ${r.xpAwarded} XP</span>`:'not cleared — try again';
       btn.textContent = r.passed?'⚒ RE-ATTEMPT':'⚔ ATTEMPT';
       if(r.passed){

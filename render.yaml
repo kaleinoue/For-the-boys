@@ -13,6 +13,17 @@ services:
     envVars:
       - key: GEMINI_API_KEY
         sync: false             # set in dashboard (secret)
+      # Routing grading through a gateway (OmniRoute / LiteLLM / OpenRouter)? Set all
+      # three, plus FORGE_MODELS to the gateway's model names. FORGE_BYOK=0 hides the
+      # in-app key panel, which a gateway would reject anyway. See README "AI grading".
+      - key: GEMINI_API_BASE
+        sync: false
+      - key: GEMINI_API_STYLE
+        sync: false
+      - key: FORGE_BYOK
+        sync: false
+      - key: FORGE_MODELS
+        sync: false
       # Shared progress. Render's free disk is wiped on restart, so set these —
       # the server creates its own tables on first boot.
       - key: TURSO_DATABASE_URL
