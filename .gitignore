@@ -20,6 +20,10 @@ build/
 
 # Forge app runtime data (shared progress store — regenerated at runtime)
 forge-app/data/progress.json
+# Hand-made Supabase exports for the Turso migration. They hold the crew's whole
+# progress, and they're made by pasting into an editor — which is exactly how the
+# wrong clipboard ends up in the repo. Nothing here ever needs committing.
+forge-app/export*.json
 # Sprite art written by the local-file store (the hosted stores keep their own copy)
 forge-app/data/sprites/
 

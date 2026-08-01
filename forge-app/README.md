@@ -105,6 +105,56 @@ It only ever **reads** from Supabase, so your old data stays intact as a rollbac
 Re-running is safe (every write is an upsert), and it refuses to overwrite a Turso
 database that already holds progress unless you pass `--overwrite`.
 
+#### Migrating from a restricted project
+
+If the script stops with **`Supabase 402 … exceed_egress_quota`**, the project has
+been restricted for busting the free-tier cap and the REST API won't serve reads —
+which is a mean trick, because that's the API you need in order to leave. The
+dashboard keeps working, so export by hand and skip the API entirely.
+
+In **SQL Editor → New query**, run this and download/copy the single JSON cell:
+
+```sql
+select json_build_object(
+  'progress', (select coalesce(json_agg(row_to_json(p)), '[]'::json)
+                 from (select crew_id, xp, steps from forge_progress) p)
+);
+```
+
+If your project also has a **`forge_sprites`** table — it won't if it predates the
+sprite split, in which case the art is still inline in the `__mobs` config and the
+script extracts it for you — add the second half:
+
+```sql
+select json_build_object(
+  'progress', (select coalesce(json_agg(row_to_json(p)), '[]'::json)
+                 from (select crew_id, xp, steps from forge_progress) p),
+  'sprites',  (select coalesce(json_agg(row_to_json(s)), '[]'::json)
+                 from (select id, mime, data from forge_sprites) s)
+);
+```
+
+Run the first form if you're unsure. The second fails with `42P01: relation
+"forge_sprites" does not exist` when the table isn't there — Postgres resolves table
+names when it parses the query, so no `coalesce` or `case` guard can rescue it.
+
+Save it as `export.json` next to `server.js`, then:
+
+```bash
+node migrate-supabase-to-turso.js --from-file export.json --dry-run
+node migrate-supabase-to-turso.js --from-file export.json
+```
+
+Reading from a file needs **no Supabase credentials at all** — only `TURSO_*` — so a
+locked project can't block it. Everything downstream is identical: the same inline-art
+extraction, the same verification, the same `--overwrite` guard.
+
+> If `forge_sprites` is too large for the editor to return in one cell, run the two
+> halves as separate queries and paste both results into a single `export.json` —
+> `{"progress": […], "sprites": […]}`. Do **not** migrate them as two separate runs:
+> the config references sprites by id, so a progress-only run fails verification with
+> "referenced sprite(s) missing", which is the guard doing its job.
+
 Then set `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` on your host and redeploy. Leave
 the `SUPABASE_*` vars in place — Turso takes priority, so they cost nothing and give
 you a one-line rollback. Confirm with `/api/admin/health?code=...` → `"storage":"turso"`.
