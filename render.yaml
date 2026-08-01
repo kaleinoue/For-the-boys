@@ -24,6 +24,12 @@ services:
         sync: false
       - key: FORGE_MODELS
         sync: false
+      # Grade without any AI key: FORGE_GRADER=local uses the built-in checker
+      # and queues every pass for the Game Master. FORGE_REVIEW=0 skips the queue.
+      - key: FORGE_GRADER
+        sync: false
+      - key: FORGE_REVIEW
+        sync: false
       # Shared progress. Render's free disk is wiped on restart, so set these —
       # the server creates its own tables on first boot.
       - key: TURSO_DATABASE_URL

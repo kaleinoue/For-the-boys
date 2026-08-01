@@ -315,3 +315,19 @@ img{image-rendering:pixelated}
   .node{width:80px}
   .node .connector{display:none}
 }
+
+/* ---- Game Master review queue ------------------------------------------- */
+/* One card per waiting answer. The kid's writing is the thing being judged, so
+   it gets the visual weight; the rubric is folded away until it's wanted. */
+#review-list{ max-height:64vh; overflow-y:auto; }
+.rv{ border:2px solid #3b2a1a; background:#1a120b; padding:.7rem .8rem; margin:.6rem 0; }
+.rv-top{ font-size:.8rem; margin-bottom:.4rem; }
+.rv-task{ font-size:.78rem; opacity:.75; margin-bottom:.4rem; }
+.rv-ans{ white-space:pre-wrap; background:#0d0906; border-left:3px solid #d98b2b;
+         padding:.5rem .6rem; margin:.35rem 0; font-family:'VT323',monospace; font-size:1.05rem; line-height:1.35; }
+.rv-meta{ font-size:.72rem; opacity:.6; margin:.3rem 0; }
+.rv-rub{ font-size:.75rem; opacity:.8; margin:.35rem 0; }
+.rv-rub summary{ cursor:pointer; opacity:.7; }
+.rv-act{ display:flex; gap:.4rem; flex-wrap:wrap; align-items:center; margin-top:.5rem; }
+.rv-note{ flex:1 1 12rem; min-width:8rem; background:#0d0906; border:2px solid #3b2a1a;
+          color:#e8d8bf; padding:.35rem .5rem; font-family:'VT323',monospace; font-size:1rem; }
