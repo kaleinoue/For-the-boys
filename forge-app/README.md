@@ -192,6 +192,35 @@ The app avoids the ways this budget normally leaks:
 climbing, the crew are sharing your quota instead of using their own. Full setup and
 troubleshooting: **`GEMINI_SETUP.md`**.
 
+### Grading with no AI key at all
+
+`FORGE_GRADER=local` turns off the API entirely. Grading then comes from a
+checker that reads the same rubrics, and every pass lands in a Game Master
+review queue.
+
+```
+FORGE_GRADER=local     # never calls an API; the local checker decides
+FORGE_REVIEW=0         # optional: bank XP outright and skip the queue
+```
+
+It checks the three things the rubrics actually ask for:
+
+| | what it does |
+|---|---|
+| **concept coverage** | Each step lists the ideas its rubric requires, with synonyms (`data/local-checks.js`). `q1race` passes when Role, Action, Context *and* Expectations all appear. |
+| **own words** | Compares 6-word runs against that step's own lesson text. Paste the lesson back and it says so — this is the check that makes "in your own words" mean something. |
+| **effort** | A length floor, which **drops away once every concept is covered**: a complete 19-word answer is concise, not lazy. |
+
+A pass banks the XP and unlocks the next node immediately, then waits in
+**God Mode → 📋 Review**. Each card carries the answer, the hidden rubric and
+what the checker matched, so you can rule on it without opening the content
+file. Approving keeps the XP; sending it back removes the XP and re-locks the
+node but **keeps their writing**, so they edit rather than restart.
+
+> The local checker is also the fallback whenever the AI judge can't be
+> reached, replacing the old grader that scored on word count alone — so
+> padding stops working even if you stay on `ai`.
+
 ### Routing grading through a gateway instead
 
 If you already run an LLM gateway (OmniRoute, LiteLLM, OpenRouter…), you can point the

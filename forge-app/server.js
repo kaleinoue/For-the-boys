@@ -38,6 +38,7 @@ const crypto = require('crypto');
 })();
 
 const { CREW, RANKS, ACTS } = require('./data/quests');
+const LOCAL_CHECKS = require('./data/local-checks');
 const GEARDATA = require('./public/battle-data.js');   // GEAR / CLASSES for validation
 
 const PORT = process.env.PORT || 3000;
@@ -78,6 +79,17 @@ const API_STYLE = /^openai$/i.test(process.env.GEMINI_API_STYLE || '') ? 'openai
 // off the key UI disappears and every grade uses GEMINI_API_KEY.
 const BYOK = !/^(0|false|off|no)$/i.test(String(process.env.FORGE_BYOK ?? '1').trim());
 const PASS_SCORE = 60;
+// Who decides whether an answer passes.
+//   ai    (default) — the Gemini judge, falling back to the local checker if it
+//                     can't be reached. Costs quota; grades quality.
+//   local           — never calls an API at all. The local checker decides, and
+//                     every pass lands in the Game Master's review queue for a
+//                     human to confirm. Free, instant, and the "own words" test
+//                     is enforced by comparing against the lesson text.
+const GRADER = /^local$/i.test(process.env.FORGE_GRADER || '') ? 'local' : 'ai';
+// With the local grader, a pass is provisional until the GM confirms it. Set
+// FORGE_REVIEW=0 to bank XP outright and skip the queue.
+const REVIEW = GRADER === 'local' && !/^(0|false|off|no)$/i.test(String(process.env.FORGE_REVIEW ?? '1').trim());
 const MAX_SPRITE_BYTES = 320 * 1024;  // stored sprite strips are downscaled client-side; cap the payload
 
 // Game Master / admin passcode. Set ADMIN_CODE in your env; defaults otherwise.
@@ -483,10 +495,13 @@ async function gradeResponse(step, response, userKey) {
   const text = (response || '').trim();
   if (text.length < 3)
     return { passed: false, score: 0, feedback: "Looks empty — give it a real go! Even a rough answer earns feedback.", tip: "Write a few sentences and submit again." };
+  // Grading locally is a deliberate setting, not a failure, so don't attach the
+  // "add a key" advice that the fallback path uses.
+  if (GRADER === 'local') return localGrade(step, text);
   // Prefer the player's own key (BYOK, sent per-request, never stored); fall back to a server
   // key if set. With BYOK off the player's key is ignored outright — see BYOK above.
   const key = (BYOK && userKey && userKey.trim()) || GEMINI_KEY;
-  if (!key) return mockGrade(step, text, BYOK
+  if (!key) return localGrade(step, text, BYOK
     ? 'No AI key yet — tap 🔑 and Save & Test.'
     : 'The Game Master hasn\'t set the server AI key yet — grading is offline until they do.');
 
@@ -533,7 +548,7 @@ Return ONLY JSON:
     } catch (e) { lastErr = 'parse: ' + e.message; continue; }
   }
   if (sawRate && !/HTTP 400/.test(lastErr)) lastErr = `429 rate limit (${perDay ? 'perDay' : 'perMinute'})`;
-  console.error('Grading fell back to mock:', lastErr);
+  console.error('Grading fell back to the local checker:', lastErr);
   // Daily and per-minute caps need different advice: one clears in a minute, the other at
   // midnight Pacific. Telling a kid to "wait a bit" on a spent daily quota just wastes calls.
   //
@@ -550,7 +565,7 @@ Return ONLY JSON:
     : /404/.test(lastErr) ? 'No usable grading model — the Game Master may need to set FORGE_MODELS.'
     : BYOK ? 'AI grader unreachable right now — reopen 🔑 to re-test your key.'
     : 'AI grader unreachable right now — your answer is saved, try again shortly.';
-  return mockGrade(step, text, note);
+  return localGrade(step, text, note);
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -662,15 +677,113 @@ async function geminiPing(key) {
   return { keyPresent: true, ok: false, error: 'No available grading model for this key.' };
 }
 
-function mockGrade(step, text, note) {
-  const words = text.split(/\s+/).filter(Boolean).length;
-  const score = Math.min(100, 30 + words * 4);
-  const passed = score >= PASS_SCORE;
-  const tail = note || 'Offline grader — add your Gemini key (🔑) for real AI feedback.';
+// ---- local grading ----------------------------------------------------------
+// The old grader here scored on word count alone, which taught the crew that
+// padding works. This one checks the three things the rubrics in quests.js
+// actually ask for — did they cover the required ideas, did they write it
+// themselves, did they put in real effort — and needs no API key to do it.
+//
+// It is deliberately not a judge of *quality*: that's what the Game Master
+// review queue is for. This decides whether an answer is complete enough to
+// unlock the next node and provisionally bank the XP.
+
+const NORM = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+// Which concept groups the answer touches. A group hits if ANY of its terms
+// appears, so 'expect' covers expects/expected/expectations — see local-checks.js.
+function conceptHits(norm, groups) {
+  const hit = [], missed = [];
+  for (const g of groups) (g.some(t => norm.includes(NORM(t))) ? hit : missed).push(g);
+  return { hit: hit.length, missed };
+}
+
+// Distinct list entries, for rubrics that say "3 ideas" / "3 roles". Kids write
+// lists every way there is — numbered lines, bullets, newlines, commas, or just
+// three sentences in a row — so split on all of them, then de-duplicate.
+// The sentence split needs whitespace after the period so it doesn't cut
+// "claude.ai" or "git add ." in half.
+function listItems(text) {
+  const parts = String(text || '')
+    .split(/\r?\n|(?:^|\s)\d+[.)]\s|[;•]|(?:^|\s)[-*]\s|,|(?<=[.!?])\s+/g)
+    .map(s => NORM(s)).filter(s => s.length > 2);
+  return [...new Set(parts)];
+}
+
+// How much of the answer is lifted verbatim from the lesson. Compares 6-word
+// shingles: long enough that ordinary shared phrasing ("in your own words")
+// doesn't trip it, short enough to catch a paragraph pasted back.
+function copyRatio(norm, teachText) {
+  const shingles = (s, n = 6) => {
+    const w = s.split(' ').filter(Boolean); const out = [];
+    for (let i = 0; i + n <= w.length; i++) out.push(w.slice(i, i + n).join(' '));
+    return out;
+  };
+  const mine = shingles(norm);
+  if (!mine.length) return 0;
+  const theirs = new Set(shingles(NORM(teachText)));
+  return mine.filter(s => theirs.has(s)).length / mine.length;
+}
+
+const COPY_LIMIT = 0.34;   // above this the answer is mostly the lesson read back
+
+function localGrade(step, text, note) {
+  const spec = LOCAL_CHECKS[step.id] || {};
+  const norm = NORM(text);
+  const words = norm ? norm.split(' ').length : 0;
+  // Bigger-XP steps are the "produce something" ones; scale the floor with them
+  // rather than holding a 40 XP definition to the same length as a 120 XP pitch.
+  const minWords = spec.minWords ?? Math.max(12, Math.round((step.xp || 40) / 3));
+
+  const groups = spec.concepts || [];
+  const need = Math.min(spec.min ?? groups.length, groups.length);
+  const { hit, missed } = conceptHits(norm, groups);
+  const items = spec.items ? listItems(text).length : 0;
+  const copied = copyRatio(norm, (step.teach || []).join(' '));
+
+  const okConcepts = hit >= need;
+  const okItems = !spec.items || items >= spec.items;
+  // Concepts are the real test. An answer that hits every one of them is
+  // CONCISE, not lazy — Jyana locked a whole game scope in 19 words — so once
+  // they're all covered the length floor drops to "did they write a sentence".
+  // The full floor still applies to partial answers, where it's the difference
+  // between a genuine attempt and a shrug.
+  const floor = okConcepts && okItems ? Math.min(minWords, 12) : minWords;
+  const okEffort = words >= floor;
+  const okOwnWords = copied <= COPY_LIMIT;
+  const passed = okConcepts && okItems && okEffort && okOwnWords;
+
+  // Score is coverage-led so it means something, then nudged by effort. A fail
+  // is capped below PASS_SCORE so the number never contradicts the verdict.
+  const coverage = need ? hit / need : (okEffort ? 1 : 0);
+  const itemRatio = spec.items ? Math.min(1, items / spec.items) : 1;
+  let score = Math.round(100 * (0.65 * coverage + 0.2 * itemRatio + 0.15 * Math.min(1, words / (minWords * 1.5))));
+  if (copied > COPY_LIMIT) score = Math.min(score, 45);
+  score = passed ? Math.max(PASS_SCORE, Math.min(100, score)) : Math.min(PASS_SCORE - 1, Math.max(0, score));
+
+  // Say what's actually missing. "Be more specific" helps nobody.
+  let feedback, tip;
+  if (!okEffort) {
+    feedback = `That's only ${words} word${words === 1 ? '' : 's'} — there isn't enough here to check yet.`;
+    tip = `Aim for at least ${minWords} words and answer every part of the task.`;
+  } else if (!okOwnWords) {
+    feedback = 'Most of this is copied straight from the lesson above. The task is to say it in your OWN words.';
+    tip = 'Close the lesson, then write what you remember and why it matters to you.';
+  } else if (!okItems) {
+    feedback = `The task asks for ${spec.items}, and I can only count ${items} distinct one${items === 1 ? '' : 's'}.`;
+    tip = `List them clearly — one per line — until you have ${spec.items}.`;
+  } else if (!okConcepts) {
+    feedback = `Good start — you covered ${hit} of the ${need} things this step is looking for.`;
+    tip = 'Re-read the "You pass when…" line and make sure each part shows up in your answer.';
+  } else {
+    feedback = `Nice — that covers everything this step asks for, in your own words.`;
+    tip = 'Add a concrete example from your own game to make it bulletproof.';
+  }
+
   return {
-    passed, score, offline: true,
-    feedback: (passed ? `Nice — solid effort (${words} words). ` : `Good start, but stretch it out and be specific. `) + '(' + tail + ')',
-    tip: passed ? 'Add a concrete example to make it bulletproof.' : 'Aim for a few clear sentences that hit every part of the task.',
+    passed, score, local: true, offline: true,
+    feedback: note ? `${feedback} (${note})` : feedback,
+    tip,
+    detail: { words, minWords, hit, need, items, wantItems: spec.items || 0, copied: Math.round(copied * 100) },
   };
 }
 
@@ -704,7 +817,10 @@ const server = http.createServer(async (req, res) => {
     // What the client needs to know before it draws anything. `byok` decides whether the
     // 🔑 panel exists at all — see BYOK. No secrets here, only whether a key is configured.
     if (req.method === 'GET' && url === '/api/config')
-      return sendJson(res, 200, { byok: BYOK, hasServerKey: !!GEMINI_KEY });
+      // `grader` tells the client whether an AI is involved at all: with the local
+      // grader there is no key to bring, so the 🔑 panel is pointless regardless
+      // of BYOK, and a pass may be marked "awaiting review".
+      return sendJson(res, 200, { byok: BYOK && GRADER !== 'local', hasServerKey: !!GEMINI_KEY, grader: GRADER, review: REVIEW });
     if (req.method === 'GET' && url === '/api/quests') return sendJson(res, 200, publicQuests());
     if (req.method === 'GET' && url === '/api/state') return sendJson(res, 200, decorate(await loadState()));
 
@@ -827,6 +943,51 @@ const server = http.createServer(async (req, res) => {
       if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
       const rubrics = {}; for (const id in stepIndex) rubrics[id] = stepIndex[id].rubric;
       return sendJson(res, 200, { rubrics });
+    }
+    // ---- Game Master review queue ----
+    // Every answer the local checker passed, oldest first, with what it saw and
+    // the step's hidden rubric alongside — so a verdict can be reached from this
+    // one payload without digging through the content file.
+    if (req.method === 'GET' && url === '/api/admin/reviews') {
+      const code = new URL(req.url, 'http://x').searchParams.get('code');
+      if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
+      const state = await loadState();
+      const pending = [];
+      for (const c of CREW) {
+        const m = state.crew[c.id]; if (!m) continue;
+        for (const stepId in m.steps) {
+          const s = m.steps[stepId];
+          if (!s || s.review !== 'pending') continue;
+          const step = stepIndex[stepId]; if (!step) continue;
+          pending.push({ crewId: c.id, crewName: c.name, stepId, stepTitle: step.title, xp: s.xp,
+                         score: s.score, at: s.at, response: s.response, detail: s.detail,
+                         prompt: step.prompt, check: step.check, rubric: step.rubric });
+        }
+      }
+      pending.sort((a, b) => (a.at || 0) - (b.at || 0));
+      return sendJson(res, 200, { pending, count: pending.length });
+    }
+    if (req.method === 'POST' && url === '/api/admin/review') {
+      const { code, crewId, stepId, verdict, note } = await readBody(req);
+      if (!adminOK(code)) return sendJson(res, 403, { error: 'Bad passcode.' });
+      const state = await loadState();
+      const member = state.crew[crewId];
+      const s = member && member.steps[stepId];
+      if (!s) return sendJson(res, 400, { error: 'Unknown crew member or step.' });
+      if (verdict === 'approve') {
+        s.review = 'approved';
+        if (note) s.reviewNote = String(note).slice(0, 400);
+      } else if (verdict === 'reject') {
+        // Send it back: the XP goes away and the node re-locks, but their writing
+        // stays put so they're editing an answer rather than starting over.
+        s.review = 'rejected'; s.passed = false; s.xp = 0;
+        s.reviewNote = String(note || '').slice(0, 400) || 'Sent back by the Game Master — give it another pass.';
+        recomputeXp(member);
+      } else {
+        return sendJson(res, 400, { error: 'verdict must be "approve" or "reject".' });
+      }
+      await saveMember(crewId, member);
+      return sendJson(res, 200, { ok: true, state: decorate(state) });
     }
     if (req.method === 'POST' && url === '/api/admin/force') {
       const { code, crewId, stepId } = await readBody(req);
@@ -963,7 +1124,7 @@ const server = http.createServer(async (req, res) => {
       const cfg = await loadMobs();
       return sendJson(res, 200, {
         storage: STORAGE_NAME, model: MODEL, models: liveModels(), retiredModels: [...deadModels],
-        apiStyle: API_STYLE, apiBase: GEMINI_BASE, byok: BYOK,
+        apiStyle: API_STYLE, apiBase: GEMINI_BASE, byok: BYOK, grader: GRADER, review: REVIEW,
         gemini: await geminiPing(),
         sprites: referencedSprites(cfg).size, configBytes: JSON.stringify(cfg).length,
         // Since boot. `serverKey` counting up means the crew are sharing YOUR key — and so
@@ -1023,9 +1184,14 @@ const server = http.createServer(async (req, res) => {
       markGraded(crewId);
       const result = await gradeResponse(step, response, userKey);   // userKey is used transiently, never stored
       const awarded = result.passed ? step.xp : 0;
+      // With review on, a local pass is provisional: XP is banked immediately so
+      // play doesn't stall waiting on a human, but the step sits in the GM queue
+      // and can still be sent back. A GM rejection removes the XP again.
+      const review = REVIEW && result.passed ? 'pending' : undefined;
       const keepBest = prev && prev.passed && prev.xp >= awarded;
       if (!keepBest) {
-        member.steps[stepId] = { passed: result.passed, score: result.score, xp: awarded, response, feedback: result.feedback, tip: result.tip, offline: !!result.offline, at: Date.now() };
+        member.steps[stepId] = { passed: result.passed, score: result.score, xp: awarded, response, feedback: result.feedback, tip: result.tip, offline: !!result.offline, at: Date.now(),
+                                 ...(review ? { review } : {}), ...(result.detail ? { detail: result.detail } : {}) };
         recomputeXp(member);
         await saveMember(crewId, member);
       } else if (prev.response !== response) {
@@ -1034,7 +1200,8 @@ const server = http.createServer(async (req, res) => {
         await saveMember(crewId, member);
       }
       return sendJson(res, 200, {
-        result: { ...result, xpAwarded: keepBest ? prev.xp : awarded, alreadyBetter: keepBest },
+        result: { ...result, xpAwarded: keepBest ? prev.xp : awarded, alreadyBetter: keepBest,
+                  review: member.steps[stepId] && member.steps[stepId].review },
         member: memberSummary(crewId, member),
         state: decorate(state),
       });

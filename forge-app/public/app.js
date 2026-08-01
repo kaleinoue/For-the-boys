@@ -118,6 +118,7 @@ function renderAdminBar(){
     <button id="gm-mobs" class="pixel-btn ghost">🗿 Mob DB</button>
     <button id="gm-proj" class="pixel-btn ghost">🎯 Projectiles</button>
     <button id="gm-terrain" class="pixel-btn ghost">🏔 Terrain</button>
+    ${CONFIG.review?`<button id="gm-review" class="pixel-btn ghost">📋 Review<span id="gm-review-n"></span></button>`:''}
     <span class="gm-hint">all trials unlocked · pick a Test class to fight with any style</span>
     <button id="gm-logout" class="pixel-btn ghost">exit GM</button>`;
   $('#gm-actas').onchange = (e)=>{ ME = e.target.value; localStorage.setItem('forge_crew_id',ME); renderHUD(); renderMap(); };
@@ -126,7 +127,74 @@ function renderAdminBar(){
   $('#gm-mobs').onclick = ()=>{ sfx('click'); openMobs(); };
   $('#gm-proj').onclick = ()=>{ sfx('click'); openProj(); };
   $('#gm-terrain').onclick = ()=>{ sfx('click'); openTerrain(); };
+  if($('#gm-review')){ $('#gm-review').onclick = ()=>{ sfx('click'); openReviews(); }; refreshReviewCount(); }
   $('#gm-logout').onclick = logoutGM;
+}
+
+// ---- God Mode: the review queue ---------------------------------------------
+// The local checker decides whether an answer is COMPLETE; this is where a human
+// decides whether it's any good. Everything needed for that call — their words,
+// the hidden rubric, and what the checker actually matched — is on one card, so
+// the Game Master never has to go and look the step up.
+let reviewQueue = [];
+
+async function refreshReviewCount(){
+  if(!isGod() || !CONFIG.review) return;
+  try{
+    const d = await fetch('/api/admin/reviews?code='+encodeURIComponent(GM_CODE)).then(r=>r.json());
+    reviewQueue = d.pending || [];
+    const b = $('#gm-review-n');
+    if(b) b.textContent = reviewQueue.length ? ` (${reviewQueue.length})` : '';
+  }catch{}
+}
+
+async function openReviews(){
+  if(!isGod()) return;
+  await refreshReviewCount();
+  renderReviews();
+  $('#review-modal').classList.remove('hidden');
+}
+
+function renderReviews(){
+  const box = $('#review-list');
+  if(!reviewQueue.length){ box.innerHTML = `<p class="muted">Nothing waiting. The crew are all caught up. 🎉</p>`; return; }
+  box.innerHTML = reviewQueue.map((p,i)=>{
+    const d = p.detail || {};
+    const seen = [
+      d.words!=null ? `${d.words} words` : '',
+      d.need ? `${d.hit}/${d.need} concepts` : '',
+      d.wantItems ? `${d.items}/${d.wantItems} items` : '',
+      d.copied!=null ? `${d.copied}% lifted from the lesson` : '',
+    ].filter(Boolean).join(' · ');
+    return `<div class="rv" data-i="${i}">
+      <div class="rv-top"><b>${esc(p.crewName)}</b> · ${esc(p.stepTitle)} <span class="muted">(${p.xp} XP · scored ${p.score})</span></div>
+      <div class="rv-task"><b>Task:</b> ${esc(p.prompt||'')}</div>
+      <div class="rv-ans">${esc(p.response||'')}</div>
+      <div class="rv-meta">🤖 ${esc(seen)}</div>
+      <details class="rv-rub"><summary>rubric</summary>${esc(p.rubric||'')}</details>
+      <div class="rv-act">
+        <input class="rv-note" placeholder="note back to them (optional)">
+        <button class="pixel-btn rv-ok">✓ Approve</button>
+        <button class="pixel-btn ghost rv-no">↩ Send back</button>
+      </div></div>`;
+  }).join('');
+  box.querySelectorAll('.rv').forEach(el=>{
+    const p = reviewQueue[+el.dataset.i];
+    const note = ()=> el.querySelector('.rv-note').value.trim();
+    el.querySelector('.rv-ok').onclick = ()=> sendReview(p,'approve',note());
+    el.querySelector('.rv-no').onclick = ()=> sendReview(p,'reject',note());
+  });
+}
+
+async function sendReview(p, verdict, note){
+  const r = await fetch('/api/admin/review',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({code:GM_CODE,crewId:p.crewId,stepId:p.stepId,verdict,note})})
+    .then(x=>x.json()).catch(()=>({error:'network'}));
+  if(r.error){ toast('⚠ '+r.error); return; }
+  STATE = r.state; sfx('click');
+  toast(verdict==='approve' ? `✓ Approved — ${p.crewName} keeps the ${p.xp} XP.`
+                            : `↩ Sent back to ${p.crewName} — the ${p.xp} XP came off.`);
+  await refreshReviewCount(); renderReviews(); renderHUD(); renderMap();
 }
 
 // ---- God Mode: Mob Database -------------------------------------------------
@@ -825,7 +893,10 @@ function renderStep(step){
       // Same answer as last time: this is the saved grade replayed, so no API call and no XP re-burst.
       if(r.cached){ btn.textContent = r.passed?'⚒ RE-ATTEMPT':'⚔ ATTEMPT';
         toast('↩ Same answer — showing your saved grade (no AI credits used).'); renderHUD(); renderMap(); return; }
-      if(r.offline){
+      // With the local grader this IS the grader, not a degraded fallback, so
+      // don't cry wolf about it — an "offline" warning on every single answer
+      // trains the crew to ignore warnings.
+      if(r.offline && CONFIG.grader!=='local'){
         if(CONFIG.byok){ const bk=$('#btn-apikey'); if(bk) bk.textContent='🔑❗'; toast('⚠ Graded offline — real AI grading didn\'t run. Tap 🔑 to re-test your key.'); }
         else toast('⚠ Graded offline — the AI grader didn\'t answer. Your XP is saved.');
       }
@@ -845,10 +916,14 @@ function renderStep(step){
 
 function gradeCard(r){
   const d=document.createElement('div'); d.className='grade '+(r.passed?'pass':'fail');
+  // A pending review is not a warning — the XP is already theirs. Say what it
+  // means plainly so "awaiting" doesn't read as "might vanish".
+  const pending = r.review==='pending'
+    ? `<div class="g-tip">👀 XP banked. The Game Master will read this one too.</div>` : '';
   d.innerHTML=`<div class="g-top"><span class="${r.passed?'win':'lose'}">${r.passed?'✦ VICTORY':'✕ KEEP GOING'}</span>
       <span class="g-score">${r.score}/100</span></div>
     <div class="g-fb">${esc(r.feedback||'')}</div>
-    ${r.tip?`<div class="g-tip">💡 ${esc(r.tip)}</div>`:''}`;
+    ${r.tip?`<div class="g-tip">💡 ${esc(r.tip)}</div>`:''}${pending}`;
   return d;
 }
 
